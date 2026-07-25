@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EFE8D8;
+    --paper-dark:#E4DAC0;
+    --paper-darker:#D8CBA9;
+    --ink:#2A2A22;
+    --ink-soft:#6b6a58;
+    --pine:#1F4B3F;
+    --pine-deep:#123128;
+    --pine-tint:#DCE7DF;
+    --rust:#C1622B;
+    --rust-tint:#F3DFCC;
+    --brass:#9C7F32;
+    --danger:#9C3B2E;
+    --danger-tint:#F2DAD3;
+    --line:#C9BFA3;
+    --line-soft:#DDD3B6;
+    --shadow: 0 2px 0 rgba(42,42,34,0.08);
+    --radius: 3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 8% 0%, rgba(31,75,63,0.06), transparent 40%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Work Sans', sans-serif;
+    font-size:14px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Oswald', sans-serif;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    font-weight:600;
+    color:var(--pine-deep);
+    margin:0;
+  }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  #app{max-width:1080px;margin:0 auto;padding:20px 18px 80px;}
+
+  /* ---------- Trip tag header ---------- */
+  .tag{
+    position:relative;
+    background:var(--pine);
+    color:#F4EFE0;
+    border-radius:10px;
+    padding:22px 26px 20px 44px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:18px;
+    justify-content:space-between;
+    background-image:
+      radial-gradient(circle at 18px 50%, var(--paper) 7px, rgba(0,0,0,0) 7.5px),
+      repeating-linear-gradient(0deg, rgba(244,239,224,0.14) 0 1px, transparent 1px 9px);
+    background-position: 0 0, 0 0;
+    border:1.5px dashed rgba(244,239,224,0.35);
+    box-shadow: 0 6px 0 rgba(18,49,40,0.25);
+  }
+  .tag::before{
+    content:"";
+    position:absolute;
+    left:11px; top:50%; transform:translateY(-50%);
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid var(--pine);
+    background:var(--paper);
+  }
+  .tag .tag-left{display:flex; align-items:center; gap:14px; min-width:0;}
+  .tag .glyph{
+    font-size:28px; line-height:1;
+    filter:drop-shadow(0 1px 0 rgba(0,0,0,0.25));
+  }
+  .cover-thumb{
+    width:56px; height:56px; border-radius:8px; flex:none;
+    background:rgba(244,239,224,0.12); border:1.5px solid rgba(244,239,224,0.35);
+    display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative;
+  }
+  .cover-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .cover-edit-badge{
+    position:absolute; right:-4px; bottom:-4px; background:var(--rust); border-radius:50%;
+    width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:10px;
+    border:2px solid var(--pine);
+  }
+  .loc-line{margin-top:4px; font-size:11.5px;}
+  .loc-line a{color:#F4EFE0; text-decoration:underline; text-decoration-color:rgba(244,239,224,0.5);}
+  .loc-add{cursor:pointer; opacity:.75; text-decoration:underline dotted;}
+  .loc-edit{cursor:pointer; opacity:.65; margin-left:8px; text-decoration:underline dotted; font-size:10.5px;}
+  .backend-chip{font-size:10px; letter-spacing:.03em;}
+  .backend-chip.ok{color:var(--pine);}
+  .backend-chip.warn{color:var(--rust);}
+  .access-badge{
+    display:inline-block; font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    padding:3px 10px; border-radius:12px; border:1px solid var(--line);
+  }
+  .access-badge.admin{background:var(--pine-tint); color:var(--pine-deep); border-color:#a9c6b8;}
+  .access-badge.viewer{background:var(--paper-dark); color:var(--ink-soft);}
+  .tag .titles{min-width:0;}
+  .tag h1{font-size:22px; color:#F4EFE0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:46vw;}
+  .tag .sub{font-size:11px; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-top:3px;}
+  .tag .stats{display:flex; gap:10px; flex-wrap:wrap;}
+  .stat-chip{
+    background:rgba(244,239,224,0.12);
+    border:1px solid rgba(244,239,224,0.3);
+    border-radius:20px;
+    padding:6px 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    display:flex; flex-direction:column; align-items:center; gap:1px;
+    min-width:78px;
+  }
+  .stat-chip b{font-size:14px;}
+  .stat-chip span{font-size:9px; letter-spacing:.08em; text-transform:uppercase; opacity:.7;}
+  .stat-chip.warn{background:rgba(193,98,43,0.25); border-color:rgba(193,98,43,0.55);}
+  .stat-chip.ok{background:rgba(70,130,100,0.25); border-color:rgba(70,130,100,0.5);}
+
+  .switcher{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+  select, button, input, textarea{
+    font-family:'Work Sans', sans-serif;
+    font-size:13px;
+  }
+  .btn{
+    appearance:none; border:1px solid var(--pine); background:var(--pine); color:#F4EFE0;
+    padding:8px 14px; border-radius:4px; cursor:pointer; font-weight:600; letter-spacing:.02em;
+    box-shadow: var(--shadow);
+  }
+  .btn:hover{background:var(--pine-deep);}
+  .btn.ghost{background:transparent; color:var(--pine); border:1px solid var(--pine);}
+  .btn.ghost:hover{background:var(--pine-tint);}
+  .btn.rust{background:var(--rust); border-color:var(--rust);}
+  .btn.rust:hover{background:#a4501f;}
+  .btn.sm{padding:5px 10px; font-size:12px;}
+  .btn.icon{padding:6px 9px; line-height:1;}
+  select.trip-select{
+    background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:7px 10px;
+    color:var(--ink); font-weight:500; max-width:220px;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tabs{
+    display:flex; gap:2px; margin-top:18px; border-bottom:2px solid var(--pine-deep);
+    overflow-x:auto;
+  }
+  .tab{
+    padding:10px 16px; cursor:pointer; white-space:nowrap;
+    font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:12.5px;
+    color:var(--ink-soft); background:var(--paper-dark); border:1px solid var(--line-soft); border-bottom:none;
+    border-radius:6px 6px 0 0; position:relative; top:2px;
+  }
+  .tab.active{
+    color:#F4EFE0; background:var(--pine-deep); border-color:var(--pine-deep);
+  }
+
+  .panel{
+    background:#F7F2E6; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 8px 8px; padding:22px;
+    box-shadow: var(--shadow);
+  }
+  .panel-section + .panel-section{margin-top:26px; padding-top:22px; border-top:1px dashed var(--line);}
+  .section-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
+  .section-head h2{font-size:16px;}
+  .section-note{font-size:11.5px; color:var(--ink-soft); font-style:italic; margin-top:-6px; margin-bottom:14px;}
+
+  table{width:100%; border-collapse:collapse;}
+  th{
+    text-align:left; font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-soft); border-bottom:2px solid var(--line); padding:8px 8px;
+  }
+  td{padding:6px 8px; border-bottom:1px solid var(--line-soft); vertical-align:middle;}
+  tr.subtotal td{background:var(--paper-dark); font-weight:600; font-family:'IBM Plex Mono',monospace;}
+  tr.grandtotal td{background:var(--pine-tint); font-weight:700; font-family:'IBM Plex Mono',monospace; border-top:2px solid var(--pine);}
+  tr.group-head td{
+    background:var(--pine-deep); color:#F4EFE0; font-family:'Oswald',sans-serif; text-transform:uppercase;
+    letter-spacing:.05em; font-size:12px; padding-top:8px; padding-bottom:8px;
+  }
+  td input[type=text], td input[type=number], td select{
+    width:100%; border:1px solid transparent; background:transparent; padding:5px 6px; border-radius:3px;
+    color:var(--ink); font-size:13px;
+  }
+  td input:hover, td select:hover{border-color:var(--line);}
+  td input:focus, td select:focus{border-color:var(--pine); outline:none; background:#fff;}
+  .num{font-family:'IBM Plex Mono',monospace; text-align:right;}
+  .num input{text-align:right;}
+  .neg{color:var(--danger);}
+  .pos{color:var(--pine);}
+  .row-actions{width:34px; text-align:center;}
+  .del{background:none; border:none; cursor:pointer; color:var(--ink-soft); font-size:15px; padding:2px 6px; border-radius:3px;}
+  .del:hover{color:var(--danger); background:var(--danger-tint);}
+
+  .addrow{margin-top:10px;}
+
+  .banner{
+    border-radius:8px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between;
+    gap:16px; flex-wrap:wrap; margin-top:18px;
+  }
+  .banner.ok{background:var(--pine-tint); border:1px solid #a9c6b8;}
+  .banner.warn{background:var(--danger-tint); border:1px solid #d9b2a8;}
+  .banner .big{font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600;}
+  .banner .label{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.05em; font-size:12px; color:var(--ink-soft);}
+
+  .toggle-group{display:flex; border:1px solid var(--pine); border-radius:20px; overflow:hidden;}
+  .toggle-group button{
+    border:none; background:var(--paper); color:var(--pine); padding:6px 14px; cursor:pointer;
+    font-family:'Oswald',sans-serif; font-size:11.5px; letter-spacing:.05em; text-transform:uppercase;
+  }
+  .toggle-group button.active{background:var(--pine); color:#F4EFE0;}
+
+  .empty{
+    text-align:center; padding:36px 20px; color:var(--ink-soft); font-style:italic;
+    border:1.5px dashed var(--line); border-radius:8px;
+  }
+
+  .day-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
+  .day-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:14px;
+    position:relative;
+  }
+  .day-card .day-title{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+  }
+  .day-card .day-title input{
+    font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:14px;
+    border:none; background:transparent; color:var(--pine-deep); font-weight:600; padding:2px 0; width:70%;
+  }
+  .meal-row{margin-bottom:8px;}
+  .meal-row label{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-family:'Oswald',sans-serif;}
+  .meal-row textarea{
+    width:100%; border:1px solid var(--line); border-radius:4px; padding:6px 8px; resize:vertical; min-height:34px;
+    font-family:'Work Sans',sans-serif; font-size:12.5px; margin-top:3px; background:#fff;
+  }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(18,49,40,0.45); display:flex; align-items:center; justify-content:center;
+    z-index:50; padding:20px;
+  }
+  .modal{
+    background:var(--paper); border-radius:10px; padding:24px; width:100%; max-width:420px;
+    border:1px solid var(--line); box-shadow:0 10px 30px rgba(0,0,0,0.25);
+  }
+  .modal h2{margin-bottom:14px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:5px; font-family:'Oswald',sans-serif;}
+  .field input[type=text], .field select{
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:#fff;
+  }
+  .type-pick{display:flex; gap:8px;}
+  .type-pick button{
+    flex:1; padding:14px 8px; border:1.5px solid var(--line); background:#fff; border-radius:8px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:4px; font-family:'Oswald',sans-serif; font-size:11px;
+    text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);
+  }
+  .type-pick button .g{font-size:22px;}
+  .type-pick button.active{border-color:var(--pine); background:var(--pine-tint); color:var(--pine-deep);}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px;}
+
+  .footer-note{margin-top:26px; text-align:center; font-size:11px; color:var(--ink-soft); font-style:italic;}
+
+  @media (max-width:640px){
+    .tag{padding:18px 16px 16px 34px;}
+    .tag h1{max-width:60vw; font-size:18px;}
+    .stat-chip{min-width:64px; padding:5px 10px;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ============================= Storage helpers ============================= */
+/* Personal (per-device) data uses plain localStorage — this file is meant to be
+   opened as a real, standalone page (from Drive, email, wherever), not inside
+   the Claude.ai artifact sandbox, so localStorage works normally here. */
+const LS_BACKEND_URL_KEY = 'tripledger.backendUrl';
+
+function lsGet(key){
+  try{ const v = localStorage.getItem(key); return v===null ? null : JSON.parse(v); }
+  catch(e){ return null; }
+}
+function lsSet(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch(e){ console.error('localStorage set failed', e); return false; }
+}
+
+/* Shared (cross-device) data goes to a Google Apps Script Web App backed by a
+   Google Sheet (+ Drive for photos) that you deploy yourself — see SETUP.md. */
+function getBackendUrl(){ return localStorage.getItem(LS_BACKEND_URL_KEY) || ''; }
+function setBackendUrl(url){ localStorage.setItem(LS_BACKEND_URL_KEY, url.trim()); }
+
+async function backendGet(key){
+  const url = getBackendUrl();
+  if(!url) return {ok:false, error:'no-backend'};
+  try{
+    const res = await fetch(url + '?action=get&key=' + encodeURIComponent(key), {method:'GET'});
+    const data = await res.json();
+    return data.ok ? {ok:true, value: data.value} : {ok:false, error: data.error||'unknown'};
+  }catch(e){
+    return {ok:false, error: String(e)};
+  }
+}
+async function backendSet(key, valueStr){
+  const url = getBackendUrl();
+  if(!url) return {ok:false, error:'no-backend'};
+  try{
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids a CORS preflight against Apps Script
+      body: JSON.stringify({action:'set', key, value: valueStr}),
+    });
+    const data = await res.json();
+    return data.ok ? {ok:true} : {ok:false, error:data.error||'unknown'};
+  }catch(e){
+    return {ok:false, error:String(e)};
+  }
+}
+async function backendUploadPhoto(tripId, dataUrl){
+  const url = getBackendUrl();
+  if(!url) return {ok:false, error:'no-backend'};
+  try{
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'uploadPhoto', tripId, dataUrl}),
+    });
+    const data = await res.json();
+    return data.ok ? {ok:true, url:data.url} : {ok:false, error:data.error||'unknown'};
+  }catch(e){
+    return {ok:false, error:String(e)};
+  }
+}
+
+// Unified interface matching the app's original calling convention:
+// storeGet(key, shared) / storeSet(key, value, shared)
+async function storeGet(key, shared){
+  if(!shared) return lsGet(key);
+  const r = await backendGet(key);
+  if(!r.ok){ setBackendStatus(r.error==='no-backend' ? 'unconfigured' : 'error'); return null; }
+  setBackendStatus('ok');
+  return (r.value===null || r.value===undefined || r.value==='') ? null : JSON.parse(r.value);
+}
+async function storeSet(key, value, shared){
+  if(!shared){ return lsSet(key, value); }
+  const r = await backendSet(key, JSON.stringify(value));
+  setBackendStatus(r.ok ? 'ok' : (r.error==='no-backend' ? 'unconfigured' : 'error'));
+  return r.ok;
+}
+
+let backendStatus = 'unknown'; // 'unknown' | 'unconfigured' | 'ok' | 'error'
+function setBackendStatus(s){
+  if(backendStatus === s) return;
+  backendStatus = s;
+  renderBackendChip();
+}
+function renderBackendChip(){
+  const el = document.getElementById('backendChip');
+  if(!el) return;
+  const map = {
+    unknown: {text:'', cls:''},
+    unconfigured: {text:'⚙ Backend not connected', cls:'warn'},
+    ok: {text:'● Synced', cls:'ok'},
+    error: {text:'⚠ Sync error — check backend', cls:'warn'},
+  };
+  const m = map[backendStatus] || map.unknown;
+  el.textContent = m.text;
+  el.className = 'backend-chip ' + m.cls;
+}
+
+function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
+function money(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:0}); }
+function money2(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+const ADMIN_NAMES = ['vikash deo','neville reddy','gavin ponusamy'];
+
+/* ============================= App state ============================= */
+const state = {
+  tripsIndex: [],   // [{id,name,type,createdAt}]
+  trip: null,       // current full trip object
+  tab: 'overview',
+  shoppingView: 'category',
+  showNewTripModal: false,
+  showImportModal: false,
+  showSwitchModal: false,
+  loaded: false,
+  identity: null,   // {name, phone}
+};
+
+let ADMIN = false;
+function computeAdmin(){
+  ADMIN = !!(state.identity && ADMIN_NAMES.includes(String(state.identity.name||'').trim().toLowerCase()));
+  return ADMIN;
+}
+function isAdminName(name){
+  return ADMIN_NAMES.includes(String(name||'').trim().toLowerCase());
+}
+
+const TYPE_META = {
+  fishing: {glyph:'🎣', label:'Fishing Trip'},
+  camping: {glyph:'⛺', label:'Camping Trip'},
+  other:   {glyph:'🧭', label:'Trip'},
+};
+
+function newTrip(name, type){
+  return {
+    id: uid(),
+    name: name || 'New Trip',
+    type: type || 'fishing',
+    createdAt: Date.now(),
+    photo: null,               // base64 data URL of cover photo
+    location: {name:'', mapsUrl:''},
+    costs: [
+      {id:uid(), label:'Accommodation', budget:0, actual:0},
+      {id:uid(), label:'Travel / Transport', budget:0, actual:0},
+    ],
+    roles: [
+      {id:uid(), label:'Standard share', amount:0},
+    ],
+    people: [],
+    days: [
+      {id:uid(), label:'Day 1', breakfast:'', lunch:'', dinner:''},
+    ],
+    shopping: [],
+  };
+}
+
+function ensureTripShape(t){
+  // backfill fields for trips saved before photo/location existed
+  if(t.photo === undefined) t.photo = null;
+  if(!t.location) t.location = {name:'', mapsUrl:''};
+  return t;
+}
+
+/* ============================= Derived calculations ============================= */
+function groupShopping(trip, key){
+  const groups = {};
+  trip.shopping.forEach(item=>{
+    const g = (item[key] && item[key].trim()) ? item[key].trim() : (key==='store' ? 'Store TBD' : 'Uncategorised');
+    if(!groups[g]) groups[g] = {label:g, items:[], budget:0, actual:0};
+    const qty = Number(item.qty)||0;
+    const unit = Number(item.unitActual)||0;
+    const budget = Number(item.budget)||0;
+    const actual = qty * unit;
+    groups[g].items.push(item);
+    groups[g].budget += budget;
+    groups[g].actual += actual;
+  });
+  return Object.values(groups);
+}
+
+function shoppingTotals(trip){
+  let budget=0, actual=0;
+  trip.shopping.forEach(item=>{
+    budget += Number(item.budget)||0;
+    actual += (Number(item.qty)||0) * (Number(item.unitActual)||0);
+  });
+  return {budget, actual};
+}
+
+function costLinesTotals(trip){
+  let budget=0, actual=0;
+  trip.costs.forEach(c=>{ budget += Number(c.budget)||0; actual += Number(c.actual)||0; });
+  return {budget, actual};
+}
+
+function grandTotals(trip){
+  const c = costLinesTotals(trip);
+  const s = shoppingTotals(trip);
+  return {budget: c.budget + s.budget, actual: c.actual + s.actual};
+}
+
+function collectedTotal(trip){
+  return trip.people.reduce((sum,p)=> sum + (Number(p.paid)||0), 0);
+}
+
+function owedFor(trip, person){
+  const role = trip.roles.find(r=>r.id===person.roleId);
+  return role ? Number(role.amount)||0 : 0;
+}
+
+/* ============================= Persistence ============================= */
+let saveTimer = null;
+let sizeWarned = false;
+function scheduleSave(){
+  if(!ADMIN) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    if(!state.trip) return;
+    const size = JSON.stringify(state.trip).length;
+    if(size > 45000){
+      if(!sizeWarned){
+        sizeWarned = true;
+        alert('This trip\u2019s data is getting close to the Google Sheets cell size limit (45k+ characters). Consider trimming the shopping list or splitting into another trip \u2014 further changes may fail to save.');
+      }
+    } else {
+      sizeWarned = false;
+    }
+    storeSet('trip:'+state.trip.id, state.trip, true);
+  }, 250);
+}
+function touchIndex(){
+  const idx = state.tripsIndex.find(t=>t.id===state.trip.id);
+  if(idx){ idx.name = state.trip.name; idx.type = state.trip.type; }
+  storeSet('trips-index', state.tripsIndex, true);
+}
+
+async function loadIdentity(){
+  return await storeGet('my-identity', false);
+}
+async function saveIdentity(name, phone){
+  state.identity = {name: name.trim(), phone: (phone||'').trim()};
+  await storeSet('my-identity', state.identity, false);
+  computeAdmin();
+}
+async function clearIdentity(){
+  state.identity = null;
+  ADMIN = false;
+  await storeSet('my-identity', null, false);
+  render();
+}
+
+async function init(){
+  if(!getBackendUrl()){
+    state.loaded = true;
+    render();
+    return;
+  }
+  state.identity = await loadIdentity();
+  computeAdmin();
+  if(!state.identity){
+    state.loaded = true;
+    render();
+    return;
+  }
+  await loadTripsAndTrip();
+}
+
+async function loadTripsAndTrip(){
+  const idx = await storeGet('trips-index', true);
+  state.tripsIndex = idx || [];
+  const lastId = await storeGet('last-trip-id', false);
+  let tripToLoad = null;
+  if(lastId && state.tripsIndex.find(t=>t.id===lastId)){
+    tripToLoad = await storeGet('trip:'+lastId, true);
+  } else if(state.tripsIndex.length){
+    tripToLoad = await storeGet('trip:'+state.tripsIndex[0].id, true);
+  }
+  if(!tripToLoad){
+    if(ADMIN) state.showNewTripModal = true;
+  } else {
+    state.trip = ensureTripShape(tripToLoad);
+  }
+  state.loaded = true;
+  render();
+}
+
+async function selectTrip(id){
+  const t = await storeGet('trip:'+id, true);
+  if(t){
+    state.trip = ensureTripShape(t);
+    state.tab = 'overview';
+    storeSet('last-trip-id', id, false);
+    render();
+  }
+}
+
+async function createTrip(name, type){
+  if(!ADMIN) return;
+  const t = newTrip(name, type);
+  state.tripsIndex.push({id:t.id, name:t.name, type:t.type, createdAt:t.createdAt});
+  await storeSet('trips-index', state.tripsIndex, true);
+  await storeSet('trip:'+t.id, t, true);
+  await storeSet('last-trip-id', t.id, false);
+  state.trip = t;
+  state.tab = 'overview';
+  state.showNewTripModal = false;
+  render();
+}
+
+async function deleteCurrentTrip(){
+  if(!ADMIN || !state.trip) return;
+  if(!confirm('Delete "'+state.trip.name+'"? This cannot be undone.')) return;
+  const id = state.trip.id;
+  state.tripsIndex = state.tripsIndex.filter(t=>t.id!==id);
+  await storeSet('trips-index', state.tripsIndex, true);
+  if(state.tripsIndex.length){
+    await selectTrip(state.tripsIndex[0].id);
+  } else {
+    state.trip = null;
+    state.showNewTripModal = true;
+    render();
+  }
+}
+
+/* ============================= Rendering ============================= */
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){ app.innerHTML = ''; return; }
+  if(!getBackendUrl()){
+    app.innerHTML = renderBackendGate();
+    bindBackendGate();
+    return;
+  }
+  if(!state.identity){
+    app.innerHTML = renderIdentityGate();
+    bindIdentityGate();
+    return;
+  }
+  if(!state.trip){
+    if(ADMIN){
+      app.innerHTML = renderIdentityBadge() + renderNewTripModal(true);
+      bindNewTripModal();
+    } else {
+      app.innerHTML = renderIdentityBadge() + renderNoTripsForViewer();
+      bindIdentityBadge();
+      const rb = document.getElementById('refreshTrips');
+      if(rb) rb.addEventListener('click', loadTripsAndTrip);
+    }
+    return;
+  }
+  const t = state.trip;
+  const g = grandTotals(t);
+  const collected = collectedTotal(t);
+  const surplus = collected - g.actual;
+  const meta = TYPE_META[t.type] || TYPE_META.other;
+
+  app.innerHTML = `
+    ${renderIdentityBadge()}
+    <div class="tag">
+      <div class="tag-left">
+        <div class="cover-thumb" id="coverThumb" title="${ADMIN?'Click to add/change photo':''}" style="${ADMIN?'cursor:pointer':''}">
+          ${t.photo ? `<img src="${t.photo}" alt="Trip photo">` : `<span class="glyph">${meta.glyph}</span>`}
+          ${ADMIN ? `<span class="cover-edit-badge">📷</span>` : ''}
+        </div>
+        <div class="titles">
+          <h1 id="tripNameDisplay" title="${ADMIN?'Click to rename':''}" style="${ADMIN?'cursor:pointer':''}">${escapeHtml(t.name)}</h1>
+          <div class="sub">${meta.label} &middot; ${t.people.length} member${t.people.length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
+          <div class="loc-line">
+            ${t.location && t.location.name
+              ? `<a href="${escapeHtml(t.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(t.location.name)))}" target="_blank" rel="noopener">📍 ${escapeHtml(t.location.name)}</a>`
+              : (ADMIN ? `<span class="loc-add" id="btnSetLocation">📍 Add location</span>` : '')}
+            ${ADMIN && t.location && t.location.name ? `<span class="loc-edit" id="btnSetLocation">edit</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat-chip"><b>${money(g.budget)}</b><span>Budget</span></div>
+        <div class="stat-chip"><b>${money(g.actual)}</b><span>Actual</span></div>
+        <div class="stat-chip ${surplus>=0?'ok':'warn'}"><b>${surplus>=0?'+':''}${money(surplus)}</b><span>${surplus>=0?'Surplus':'Shortfall'}</span></div>
+      </div>
+      <div class="switcher">
+        <select class="trip-select" id="tripSwitch">
+          ${state.tripsIndex.map(ti=>`<option value="${ti.id}" ${ti.id===t.id?'selected':''}>${(TYPE_META[ti.type]||TYPE_META.other).glyph} ${escapeHtml(ti.name)}</option>`).join('')}
+        </select>
+        ${ADMIN ? `<button class="btn ghost sm" id="btnNewTrip" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">+ New</button>` : ''}
+        ${ADMIN ? `<button class="btn ghost sm" id="btnImport" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">⬇ Import</button>` : ''}
+        ${ADMIN && state.tripsIndex.length>1 ? `<button class="btn ghost sm" id="btnDeleteTrip" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Delete this trip">🗑</button>` : ''}
+      </div>
+      ${ADMIN ? `<input type="file" accept="image/*" id="photoInput" style="display:none">` : ''}
+    </div>
+
+    <div class="tabs">
+      ${tabBtn('overview','Overview')}
+      ${tabBtn('people','People &amp; Payments')}
+      ${tabBtn('costs','Trip Costs')}
+      ${tabBtn('meals','Meal Plan')}
+      ${tabBtn('shopping','Shopping List')}
+    </div>
+    <div class="panel" id="panel"></div>
+    <div class="footer-note">${ADMIN ? 'Everything here is saved automatically as you type — for your next fishing or camping trip, just hit "+ New".' : 'You\u2019re viewing this trip as a read-only member. Only admins can make changes.'}</div>
+  `;
+
+  document.getElementById('tripSwitch').addEventListener('change', e=>selectTrip(e.target.value));
+  if(ADMIN){
+    document.getElementById('btnNewTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+    document.getElementById('btnImport').addEventListener('click', ()=>{ state.showImportModal=true; render(); });
+    const delBtn = document.getElementById('btnDeleteTrip');
+    if(delBtn) delBtn.addEventListener('click', deleteCurrentTrip);
+    const nameEl = document.getElementById('tripNameDisplay');
+    nameEl.addEventListener('click', ()=>{
+      const val = prompt('Trip name', t.name);
+      if(val && val.trim()){ t.name = val.trim(); touchIndex(); scheduleSave(); render(); }
+    });
+    const thumb = document.getElementById('coverThumb');
+    const photoInput = document.getElementById('photoInput');
+    thumb.addEventListener('click', ()=>photoInput.click());
+    photoInput.addEventListener('change', (e)=>handlePhotoUpload(e, t));
+    const locBtn = document.getElementById('btnSetLocation');
+    if(locBtn) locBtn.addEventListener('click', ()=>editLocation(t));
+  }
+  bindIdentityBadge();
+
+  renderPanel();
+
+  if(state.showNewTripModal && ADMIN){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderNewTripModal(false);
+    document.body.appendChild(wrap.firstElementChild);
+    bindNewTripModal();
+  }
+  if(state.showImportModal && ADMIN){
+    const wrap2 = document.createElement('div');
+    wrap2.innerHTML = renderImportModal();
+    document.body.appendChild(wrap2.firstElementChild);
+    bindImportModal(t);
+  }
+}
+
+function renderIdentityBadge(){
+  const name = escapeHtml(state.identity.name);
+  const role = ADMIN ? 'Admin' : 'Viewer';
+  return `
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
+      <span id="backendChip" class="backend-chip"></span>
+      <span>Viewing as <b style="color:var(--pine-deep)">${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)">${role}</span></span>
+      ${ADMIN?'<button class="btn ghost sm" id="btnBackendSettings" style="padding:3px 10px;font-size:11px" title="Change backend URL">⚙</button>':''}
+      <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
+    </div>
+  `;
+}
+function bindIdentityBadge(){
+  const b = document.getElementById('btnSwitchIdentity');
+  if(b) b.addEventListener('click', clearIdentity);
+  const s = document.getElementById('btnBackendSettings');
+  if(s) s.addEventListener('click', ()=>{
+    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
+      localStorage.removeItem(LS_BACKEND_URL_KEY);
+      render();
+    }
+  });
+  renderBackendChip();
+}
+
+function renderNoTripsForViewer(){
+  return `
+    <div class="empty" style="margin-top:20px">
+      No trips have been set up yet.<br>
+      Ask an admin (Vikash Deo, Neville Reddy or Gavin Ponusamy) to create one, then check back.
+      <div style="margin-top:14px"><button class="btn ghost sm" id="refreshTrips">Refresh</button></div>
+    </div>
+  `;
+}
+
+function tabBtn(key,label){
+  return `<div class="tab ${state.tab===key?'active':''}" data-tab="${key}">${label}</div>`;
+}
+
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- Cover photo ---------- */
+function handlePhotoUpload(e, t){
+  if(!ADMIN) return;
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ alert('Please choose an image file.'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    const img = new Image();
+    img.onload = async function(){
+      const MAX_DIM = 1000;
+      let w = img.width, h = img.height;
+      if(w > h && w > MAX_DIM){ h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+      else if(h > MAX_DIM){ w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+
+      const thumb = document.getElementById('coverThumb');
+      if(thumb) thumb.style.opacity = '0.5';
+      const result = await backendUploadPhoto(t.id, dataUrl);
+      if(thumb) thumb.style.opacity = '1';
+      if(!result.ok){
+        alert('Photo upload failed (' + result.error + '). Check the backend connection and try again.');
+        return;
+      }
+      t.photo = result.url;
+      scheduleSave();
+      render();
+    };
+    img.onerror = function(){ alert('Could not read that image — try a different file.'); };
+    img.src = ev.target.result;
+  };
+  reader.onerror = function(){ alert('Could not read that file.'); };
+  reader.readAsDataURL(file);
+}
+
+/* ---------- Location ---------- */
+function editLocation(t){
+  if(!ADMIN) return;
+  const name = prompt('Trip location (place name or address):', (t.location && t.location.name) || '');
+  if(name === null) return; // cancelled
+  if(!t.location) t.location = {name:'', mapsUrl:''};
+  t.location.name = name.trim();
+  if(!t.location.name){
+    t.location.mapsUrl = '';
+  } else {
+    const link = prompt('Optional: paste a specific Google Maps link (leave blank to auto-search by name):', t.location.mapsUrl || '');
+    t.location.mapsUrl = (link || '').trim();
+  }
+  scheduleSave();
+  render();
+}
+
+function renderPanel(){
+  const panel = document.getElementById('panel');
+  const t = state.trip;
+  if(state.tab==='overview') panel.innerHTML = renderOverview(t);
+  else if(state.tab==='people') panel.innerHTML = renderPeople(t);
+  else if(state.tab==='costs') panel.innerHTML = renderCosts(t);
+  else if(state.tab==='meals') panel.innerHTML = renderMeals(t);
+  else if(state.tab==='shopping') panel.innerHTML = renderShopping(t);
+
+  document.querySelectorAll('.tab').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.tab = el.dataset.tab; state.showNewTripModal=false; render(); });
+  });
+
+  bindPanelEvents();
+}
+
+/* ---------- Overview ---------- */
+function renderOverview(t){
+  const catGroups = groupShopping(t, 'category');
+  const g = grandTotals(t);
+  const collected = collectedTotal(t);
+  const surplus = collected - g.actual;
+
+  let rows = '';
+  t.costs.forEach(c=>{
+    const variance = (Number(c.actual)||0) - (Number(c.budget)||0);
+    rows += `<tr>
+      <td>${escapeHtml(c.label)}</td>
+      <td class="num">${money(c.budget)}</td>
+      <td class="num">${money(c.actual)}</td>
+      <td class="num ${variance>0?'neg':'pos'}">${variance>0?'+':''}${money(variance)}</td>
+    </tr>`;
+  });
+  catGroups.forEach(gr=>{
+    const variance = gr.actual - gr.budget;
+    rows += `<tr>
+      <td>${escapeHtml(gr.label)} <span class="section-note" style="margin:0">(shopping)</span></td>
+      <td class="num">${money(gr.budget)}</td>
+      <td class="num">${money(gr.actual)}</td>
+      <td class="num ${variance>0?'neg':'pos'}">${variance>0?'+':''}${money(variance)}</td>
+    </tr>`;
+  });
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>Budget vs Actual</h2></div>
+      <div class="section-note">Pulled from Trip Costs and every category on your Shopping List.</div>
+      <table>
+        <thead><tr><th>Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
+        <tbody>
+          ${rows || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);font-style:italic;">Add cost lines or shopping items to see them here.</td></tr>`}
+          <tr class="grandtotal">
+            <td>Grand Total</td>
+            <td class="num">${money(g.budget)}</td>
+            <td class="num">${money(g.actual)}</td>
+            <td class="num ${(g.actual-g.budget)>0?'neg':'pos'}">${(g.actual-g.budget)>0?'+':''}${money(g.actual-g.budget)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-section">
+      <div class="section-head"><h2>Collections</h2></div>
+      <table>
+        <tbody>
+          <tr><td>Total collected from members</td><td class="num">${money(collected)}</td></tr>
+          <tr><td>Total actual trip cost</td><td class="num">${money(g.actual)}</td></tr>
+        </tbody>
+      </table>
+      <div class="banner ${surplus>=0?'ok':'warn'}">
+        <div><div class="label">${surplus>=0?'Surplus':'Shortfall'}</div><div class="big">${surplus>=0?'+':''}${money(surplus)}</div></div>
+        <div style="max-width:340px;font-size:12.5px;color:var(--ink-soft);">
+          ${surplus>=0 ? 'More has been collected than actually spent — nice buffer, or refund it.' : 'Actual spend is ahead of what has been collected — you may need to collect more.'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- People & Payments ---------- */
+function renderPeople(t){
+  const RO = ADMIN ? '' : 'disabled';
+  let roleRows = t.roles.map(r=>`
+    <tr data-role="${r.id}">
+      <td><input type="text" class="role-label" value="${escapeHtml(r.label)}" placeholder="e.g. Vehicle user" ${RO}></td>
+      <td class="num"><input type="number" class="role-amount" value="${r.amount}" placeholder="0" ${RO}></td>
+      <td class="row-actions">${ADMIN?'<button class="del role-del" title="Remove role">✕</button>':''}</td>
+    </tr>
+  `).join('');
+
+  let peopleRows = t.people.map(p=>{
+    const owed = owedFor(t,p);
+    const paid = Number(p.paid)||0;
+    const bal = owed - paid;
+    const isMe = state.identity && p.name && p.name.trim().toLowerCase() === state.identity.name.trim().toLowerCase();
+    const isAdminPerson = isAdminName(p.name);
+    return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
+      <td><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
+      <td><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
+      <td><span class="access-badge ${isAdminPerson?'admin':'viewer'}">${isAdminPerson?'Admin':'Viewer'}</span></td>
+      <td>
+        <select class="person-role" ${RO}>
+          <option value="">— choose —</option>
+          ${t.roles.map(r=>`<option value="${r.id}" ${r.id===p.roleId?'selected':''}>${escapeHtml(r.label)} (${money(r.amount)})</option>`).join('')}
+        </select>
+      </td>
+      <td class="num">${money(owed)}</td>
+      <td class="num"><input type="number" class="person-paid" value="${p.paid||0}" ${RO}></td>
+      <td class="num ${bal>0?'neg':'pos'}">${money(bal)}</td>
+      <td class="row-actions">${ADMIN?'<button class="del person-del" title="Remove person">✕</button>':''}</td>
+    </tr>`;
+  }).join('');
+
+  const totalOwed = t.people.reduce((s,p)=>s+owedFor(t,p),0);
+  const totalPaid = t.people.reduce((s,p)=>s+(Number(p.paid)||0),0);
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>Contribution Roles</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addRole">+ Add role</button>':''}
+      </div>
+      <div class="section-note">Define what each type of member owes — e.g. Vehicle user vs Passenger, or a flat share.</div>
+      <table>
+        <thead><tr><th>Role</th><th class="num">Amount owed</th><th></th></tr></thead>
+        <tbody>${roleRows || `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);font-style:italic;">No roles yet.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <div class="panel-section">
+      <div class="section-head"><h2>Members</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addPerson">+ Add member</button>':''}
+      </div>
+      <div class="section-note">Access is automatic — it's based on whether a member's name matches the admin list, not something you set here.</div>
+      <table>
+        <thead><tr><th>Name</th><th>Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
+        <tbody>
+          ${peopleRows || `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);font-style:italic;">No members added yet.</td></tr>`}
+          <tr class="subtotal">
+            <td colspan="4">Total</td>
+            <td class="num">${money(totalOwed)}</td>
+            <td class="num">${money(totalPaid)}</td>
+            <td class="num">${money(totalOwed-totalPaid)}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ---------- Trip Costs ---------- */
+function renderCosts(t){
+  const RO = ADMIN ? '' : 'disabled';
+  const totals = costLinesTotals(t);
+  let rows = t.costs.map(c=>{
+    const variance = (Number(c.actual)||0)-(Number(c.budget)||0);
+    return `<tr data-cost="${c.id}">
+      <td><input type="text" class="cost-label" value="${escapeHtml(c.label)}" placeholder="e.g. Accommodation" ${RO}></td>
+      <td class="num"><input type="number" class="cost-budget" value="${c.budget||0}" ${RO}></td>
+      <td class="num"><input type="number" class="cost-actual" value="${c.actual||0}" ${RO}></td>
+      <td class="num ${variance>0?'neg':'pos'}">${variance>0?'+':''}${money(variance)}</td>
+      <td class="row-actions">${ADMIN?'<button class="del cost-del" title="Remove">✕</button>':''}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>Trip Costs</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addCost">+ Add cost line</button>':''}
+      </div>
+      <div class="section-note">Accommodation, travel, permits, fuel, hire gear — anything that isn't a shopping-list item. Food/Alcohol/Misc show up automatically from your Shopping List.</div>
+      <table>
+        <thead><tr><th>Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
+        <tbody>
+          ${rows || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);font-style:italic;">No cost lines yet.</td></tr>`}
+          <tr class="subtotal">
+            <td>Subtotal</td>
+            <td class="num">${money(totals.budget)}</td>
+            <td class="num">${money(totals.actual)}</td>
+            <td class="num">${money(totals.actual-totals.budget)}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ---------- Meal Plan ---------- */
+function renderMeals(t){
+  const RO = ADMIN ? '' : 'disabled';
+  const cards = t.days.map(d=>`
+    <div class="day-card" data-day="${d.id}">
+      <div class="day-title">
+        <input type="text" class="day-label" value="${escapeHtml(d.label)}" ${RO}>
+        ${ADMIN?'<button class="del day-del" title="Remove day">✕</button>':''}
+      </div>
+      <div class="meal-row"><label>Breakfast</label><textarea class="meal-breakfast" rows="2" ${RO}>${escapeHtml(d.breakfast)}</textarea></div>
+      <div class="meal-row"><label>Lunch</label><textarea class="meal-lunch" rows="2" ${RO}>${escapeHtml(d.lunch)}</textarea></div>
+      <div class="meal-row" style="margin-bottom:0"><label>Dinner</label><textarea class="meal-dinner" rows="2" ${RO}>${escapeHtml(d.dinner)}</textarea></div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>Meal Plan</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addDay">+ Add day</button>':''}
+      </div>
+      <div class="day-grid">
+        ${cards || `<div class="empty">No days added yet — add your first day of the trip.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- Shopping List ---------- */
+function renderShopping(t){
+  const totals = shoppingTotals(t);
+  const catList = [...new Set(t.shopping.map(i=>i.category).filter(Boolean))];
+  const storeList = [...new Set(t.shopping.map(i=>i.store).filter(Boolean))];
+
+  let body = '';
+  if(!t.shopping.length){
+    body = `<div class="empty">No items yet — add what you need to buy, and group it by category or store.</div>`;
+  } else if(state.shoppingView==='category'){
+    const groups = groupShopping(t,'category');
+    groups.forEach(gr=>{
+      body += `<table style="margin-bottom:18px"><tbody>
+        <tr class="group-head"><td colspan="6">${escapeHtml(gr.label)}</td></tr>
+        <tr><th>Item</th><th>Store</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Actual</th><th></th></tr>
+        ${gr.items.map(itemRow).join('')}
+        <tr class="subtotal"><td colspan="3">Subtotal</td><td class="num">${money2(gr.budget)}</td><td class="num">${money2(gr.actual)}</td><td></td></tr>
+      </tbody></table>`;
+    });
+  } else {
+    const groups = groupShopping(t,'store');
+    groups.forEach(gr=>{
+      body += `<table style="margin-bottom:18px"><tbody>
+        <tr class="group-head"><td colspan="6">${escapeHtml(gr.label)}</td></tr>
+        <tr><th>Item</th><th>Category</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Actual</th><th></th></tr>
+        ${gr.items.map(itemRowStoreView).join('')}
+        <tr class="subtotal"><td colspan="3">Subtotal</td><td class="num">${money2(gr.budget)}</td><td class="num">${money2(gr.actual)}</td><td></td></tr>
+      </tbody></table>`;
+    });
+  }
+
+  return `
+    <div class="panel-section">
+      <div class="section-head">
+        <h2>Shopping List</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="toggle-group">
+            <button data-view="category" class="${state.shoppingView==='category'?'active':''}">By Category</button>
+            <button data-view="store" class="${state.shoppingView==='store'?'active':''}">By Store</button>
+          </div>
+          ${ADMIN?'<button class="btn ghost sm" id="addItem">+ Add item</button>':''}
+        </div>
+      </div>
+      <div class="section-note">Budget is the planned line total. Actual = Qty × Cost/unit, filled in as you shop.</div>
+      ${body}
+      <table><tbody>
+        <tr class="grandtotal"><td>Grand Total</td><td class="num">${money2(totals.budget)}</td><td class="num">${money2(totals.actual)}</td><td></td></tr>
+      </tbody></table>
+      <datalist id="catList">${catList.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
+      <datalist id="storeList">${storeList.map(s=>`<option value="${escapeHtml(s)}">`).join('')}</datalist>
+    </div>
+  `;
+}
+
+function itemRow(item){
+  const RO = ADMIN ? '' : 'disabled';
+  return `<tr data-item="${item.id}">
+    <td><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
+    <td><input type="text" class="item-store" list="storeList" value="${escapeHtml(item.store||'')}" placeholder="Store" ${RO}></td>
+    <td class="num"><input type="number" class="item-qty" value="${item.qty??1}" ${RO}></td>
+    <td class="num"><input type="number" class="item-budget" value="${item.budget||0}" ${RO}></td>
+    <td class="num"><input type="number" step="0.01" class="item-unit" value="${item.unitActual||0}" title="Cost per unit" ${RO}></td>
+    <td class="row-actions">${ADMIN?'<button class="del item-del" title="Remove">✕</button>':''}</td>
+  </tr>`;
+}
+function itemRowStoreView(item){
+  const RO = ADMIN ? '' : 'disabled';
+  return `<tr data-item="${item.id}">
+    <td><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
+    <td><input type="text" class="item-category" list="catList" value="${escapeHtml(item.category||'')}" placeholder="Category" ${RO}></td>
+    <td class="num"><input type="number" class="item-qty" value="${item.qty??1}" ${RO}></td>
+    <td class="num"><input type="number" class="item-budget" value="${item.budget||0}" ${RO}></td>
+    <td class="num"><input type="number" step="0.01" class="item-unit" value="${item.unitActual||0}" title="Cost per unit" ${RO}></td>
+    <td class="row-actions">${ADMIN?'<button class="del item-del" title="Remove">✕</button>':''}</td>
+  </tr>`;
+}
+
+/* ============================= Event binding ============================= */
+function bindPanelEvents(){
+  const t = state.trip;
+
+  // ROLES
+  qa('.role-label').forEach(el=>el.addEventListener('input', e=>{
+    findRole(t, rowId(e)).label = e.target.value; scheduleSave();
+  }));
+  qa('.role-amount').forEach(el=>{
+    el.addEventListener('input', e=>{ findRole(t, rowId(e)).amount = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.role-del').forEach(el=>el.addEventListener('click', e=>{
+    const id = rowId(e); t.roles = t.roles.filter(r=>r.id!==id); scheduleSave(); renderPanel();
+  }));
+  id('addRole') && id('addRole').addEventListener('click', ()=>{
+    t.roles.push({id:uid(), label:'New role', amount:0}); scheduleSave(); renderPanel();
+  });
+
+  // PEOPLE
+  qa('.person-name').forEach(el=>el.addEventListener('input', e=>{
+    findPerson(t, rowId(e)).name = e.target.value; scheduleSave();
+  }));
+  qa('.person-phone').forEach(el=>el.addEventListener('input', e=>{
+    findPerson(t, rowId(e)).phone = e.target.value; scheduleSave();
+  }));
+  qa('.person-role').forEach(el=>el.addEventListener('change', e=>{
+    findPerson(t, rowId(e)).roleId = e.target.value; scheduleSave(); renderPanel();
+  }));
+  qa('.person-paid').forEach(el=>{
+    el.addEventListener('input', e=>{ findPerson(t, rowId(e)).paid = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.person-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e); t.people = t.people.filter(p=>p.id!==idv); scheduleSave(); renderPanel();
+  }));
+  id('addPerson') && id('addPerson').addEventListener('click', ()=>{
+    t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0}); scheduleSave(); renderPanel();
+  });
+
+  // COSTS
+  qa('.cost-label').forEach(el=>el.addEventListener('input', e=>{
+    findCost(t, rowId(e)).label = e.target.value; scheduleSave();
+  }));
+  qa('.cost-budget').forEach(el=>{
+    el.addEventListener('input', e=>{ findCost(t, rowId(e)).budget = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.cost-actual').forEach(el=>{
+    el.addEventListener('input', e=>{ findCost(t, rowId(e)).actual = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.cost-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e); t.costs = t.costs.filter(c=>c.id!==idv); scheduleSave(); renderPanel();
+  }));
+  id('addCost') && id('addCost').addEventListener('click', ()=>{
+    t.costs.push({id:uid(), label:'New cost', budget:0, actual:0}); scheduleSave(); renderPanel();
+  });
+
+  // MEALS
+  qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
+  qa('.meal-breakfast').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).breakfast = e.target.value; scheduleSave(); }));
+  qa('.meal-lunch').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).lunch = e.target.value; scheduleSave(); }));
+  qa('.meal-dinner').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).dinner = e.target.value; scheduleSave(); }));
+  qa('.day-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e,'day'); t.days = t.days.filter(d=>d.id!==idv); scheduleSave(); renderPanel();
+  }));
+  id('addDay') && id('addDay').addEventListener('click', ()=>{
+    t.days.push({id:uid(), label:'Day '+(t.days.length+1), breakfast:'', lunch:'', dinner:''}); scheduleSave(); renderPanel();
+  });
+
+  // SHOPPING
+  document.querySelectorAll('.toggle-group button').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.shoppingView = el.dataset.view; renderPanel(); });
+  });
+  qa('.item-name').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).item = e.target.value; scheduleSave(); }));
+  qa('.item-store').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).store = e.target.value; scheduleSave(); }));
+  qa('.item-category').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).category = e.target.value; scheduleSave(); }));
+  qa('.item-qty').forEach(el=>{
+    el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).qty = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.item-budget').forEach(el=>{
+    el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).budget = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.item-unit').forEach(el=>{
+    el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).unitActual = parseFloat(e.target.value)||0; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.item-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e,'item'); t.shopping = t.shopping.filter(i=>i.id!==idv); scheduleSave(); renderPanel();
+  }));
+  id('addItem') && id('addItem').addEventListener('click', ()=>{
+    t.shopping.push({id:uid(), item:'', category:'', store:'', qty:1, budget:0, unitActual:0}); scheduleSave(); state.shoppingView='category'; renderPanel();
+  });
+}
+
+function qa(sel){ return Array.from(document.querySelectorAll(sel)); }
+function id(x){ return document.getElementById(x); }
+function rowId(e, attr){
+  attr = attr || (e.target.closest('[data-role]') ? 'role' : e.target.closest('[data-person]') ? 'person' : e.target.closest('[data-cost]') ? 'cost' : e.target.closest('[data-day]') ? 'day' : 'item');
+  const row = e.target.closest('[data-'+attr+']');
+  return row ? row.getAttribute('data-'+attr) : null;
+}
+function findRole(t,id){ return t.roles.find(r=>r.id===id); }
+function findPerson(t,id){ return t.people.find(p=>p.id===id); }
+function findCost(t,id){ return t.costs.find(c=>c.id===id); }
+function findDay(t,id){ return t.days.find(d=>d.id===id); }
+function findItem(t,id){ return t.shopping.find(i=>i.id===id); }
+
+/* ============================= Backend gate ============================= */
+function renderBackendGate(){
+  return `
+    <div class="modal-backdrop" id="backendBackdrop">
+      <div class="modal">
+        <h2>Connect the ledger</h2>
+        <div class="section-note" style="margin-bottom:16px">
+          This app stores trip data in a Google Sheet you (or your admin) control. Paste the Web App URL
+          from your Apps Script deployment below — see SETUP.md for how to create one (takes about 5 minutes,
+          one-time, free). Everyone using this trip needs the same URL.
+        </div>
+        <div class="field">
+          <label>Apps Script Web App URL</label>
+          <input type="text" id="backendUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="confirmBackendUrl">Connect</button>
+        </div>
+        <div id="backendTestMsg" class="section-note" style="margin-top:10px"></div>
+      </div>
+    </div>
+  `;
+}
+function bindBackendGate(){
+  document.getElementById('confirmBackendUrl').addEventListener('click', async ()=>{
+    const input = document.getElementById('backendUrlInput');
+    const msg = document.getElementById('backendTestMsg');
+    const url = input.value.trim();
+    if(!url || !/^https:\/\/script\.google(\.com|usercontent\.com)\//.test(url)){
+      msg.textContent = 'That doesn\u2019t look like a Google Apps Script Web App URL — double check you copied the "/exec" link.';
+      msg.style.color = 'var(--danger)';
+      return;
+    }
+    msg.textContent = 'Checking connection…';
+    msg.style.color = 'var(--ink-soft)';
+    setBackendUrl(url);
+    const test = await backendGet('trips-index');
+    if(!test.ok){
+      msg.textContent = 'Couldn\u2019t reach that URL (' + test.error + '). Double-check the deployment is set to "Anyone with the link", then try again.';
+      msg.style.color = 'var(--danger)';
+      localStorage.removeItem(LS_BACKEND_URL_KEY);
+      return;
+    }
+    init();
+  });
+}
+
+/* ============================= Identity gate ============================= */
+function renderIdentityGate(){
+  return `
+    <div class="modal-backdrop" id="identityBackdrop">
+      <div class="modal">
+        <h2>Who's this?</h2>
+        <div class="section-note" style="margin-bottom:16px">Used to identify you on this shared trip ledger — not verified, just remembered on this device. Admins (Vikash Deo, Neville Reddy, Gavin Ponusamy) get edit access; everyone else can view.</div>
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="idName" placeholder="e.g. Vikash Deo">
+        </div>
+        <div class="field">
+          <label>Mobile number</label>
+          <input type="text" id="idPhone" placeholder="04xx xxx xxx">
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="confirmIdentity">Continue</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function bindIdentityGate(){
+  document.getElementById('confirmIdentity').addEventListener('click', async ()=>{
+    const name = document.getElementById('idName').value.trim();
+    const phone = document.getElementById('idPhone').value.trim();
+    if(!name){ document.getElementById('idName').focus(); return; }
+    await saveIdentity(name, phone);
+    await loadTripsAndTrip();
+  });
+}
+
+/* ============================= New trip modal ============================= */
+function renderNewTripModal(fullscreen){
+  const content = `
+    <div class="modal-backdrop" id="newTripBackdrop">
+      <div class="modal">
+        <h2>${fullscreen? 'Start your trip ledger' : 'New trip'}</h2>
+        <div class="field">
+          <label>Trip name</label>
+          <input type="text" id="newTripName" placeholder="e.g. Straddie Fishing 2027">
+        </div>
+        <div class="field">
+          <label>Trip type</label>
+          <div class="type-pick" id="typePick">
+            <button data-type="fishing" class="active"><span class="g">🎣</span>Fishing</button>
+            <button data-type="camping"><span class="g">⛺</span>Camping</button>
+            <button data-type="other"><span class="g">🧭</span>Other</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          ${!fullscreen ? '<button class="btn ghost sm" id="cancelNewTrip">Cancel</button>' : ''}
+          <button class="btn" id="confirmNewTrip">Create trip</button>
+        </div>
+      </div>
+    </div>
+  `;
+  return content;
+}
+
+function bindNewTripModal(){
+  let chosenType = 'fishing';
+  document.querySelectorAll('#typePick button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#typePick button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      chosenType = btn.dataset.type;
+    });
+  });
+  const cancelBtn = document.getElementById('cancelNewTrip');
+  if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ state.showNewTripModal=false; render(); });
+  document.getElementById('confirmNewTrip').addEventListener('click', ()=>{
+    const nameInput = document.getElementById('newTripName');
+    const name = (nameInput.value||'').trim() || (TYPE_META[chosenType].label);
+    createTrip(name, chosenType);
+  });
+  const backdrop = document.getElementById('newTripBackdrop');
+  backdrop.addEventListener('click', (e)=>{
+    if(e.target===backdrop && state.trip){ state.showNewTripModal=false; render(); }
+  });
+}
+
+/* ============================= Import ============================= */
+function renderImportModal(){
+  return `
+    <div class="modal-backdrop" id="importBackdrop">
+      <div class="modal" style="max-width:520px">
+        <h2>Import trip data</h2>
+        <div class="section-note" style="margin-bottom:14px">
+          Paste a JSON export (Claude can generate this from an existing spreadsheet). This replaces the
+          costs, roles, members, meal plan, and shopping list on the CURRENT trip — it does not create a new trip.
+        </div>
+        <div class="field">
+          <label>JSON data</label>
+          <textarea id="importText" rows="10" style="width:100%; border:1px solid var(--line); border-radius:4px; padding:8px; font-family:'IBM Plex Mono',monospace; font-size:11px;" placeholder="Paste JSON here"></textarea>
+        </div>
+        <div id="importMsg" class="section-note"></div>
+        <div class="modal-actions">
+          <button class="btn ghost sm" id="cancelImport">Cancel</button>
+          <button class="btn" id="confirmImport">Import</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindImportModal(t){
+  const close = ()=>{ state.showImportModal=false; render(); };
+  document.getElementById('cancelImport').addEventListener('click', close);
+  const backdrop = document.getElementById('importBackdrop');
+  backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) close(); });
+  document.getElementById('confirmImport').addEventListener('click', ()=>{
+    const msg = document.getElementById('importMsg');
+    let data;
+    try{
+      data = JSON.parse(document.getElementById('importText').value);
+    }catch(e){
+      msg.textContent = 'That\u2019s not valid JSON \u2014 check for a missing bracket or comma.';
+      msg.style.color = 'var(--danger)';
+      return;
+    }
+    try{
+      applyImport(t, data);
+      touchIndex();
+      state.showImportModal = false;
+      scheduleSave();
+      render();
+    }catch(e){
+      msg.textContent = 'Import failed: ' + e.message;
+      msg.style.color = 'var(--danger)';
+    }
+  });
+}
+
+function applyImport(t, data){
+  if(data.name) t.name = String(data.name);
+  if(data.location){
+    t.location = {name: data.location.name||'', mapsUrl: data.location.mapsUrl||''};
+  }
+  if(Array.isArray(data.costs)){
+    t.costs = data.costs.map(c=>({id:uid(), label:c.label||'', budget:Number(c.budget)||0, actual:Number(c.actual)||0}));
+  }
+  const roleIdByLabel = {};
+  if(Array.isArray(data.roles)){
+    t.roles = data.roles.map(r=>{
+      const id = uid();
+      roleIdByLabel[r.label] = id;
+      return {id, label:r.label||'', amount:Number(r.amount)||0};
+    });
+  }
+  if(Array.isArray(data.people)){
+    t.people = data.people.map(p=>({
+      id: uid(),
+      name: p.name||'',
+      phone: p.phone||'',
+      roleId: roleIdByLabel[p.roleLabel] || (t.roles[0] && t.roles[0].id) || '',
+      paid: Number(p.paid)||0,
+    }));
+  }
+  if(Array.isArray(data.days)){
+    t.days = data.days.map(d=>({id:uid(), label:d.label||'', breakfast:d.breakfast||'', lunch:d.lunch||'', dinner:d.dinner||''}));
+  }
+  if(Array.isArray(data.shopping)){
+    t.shopping = data.shopping.map(s=>({
+      id: uid(),
+      item: s.item||'',
+      category: s.category||'',
+      store: s.store||'',
+      qty: s.qty===undefined ? 1 : Number(s.qty),
+      budget: Number(s.budget)||0,
+      unitActual: Number(s.unitActual)||0,
+    }));
+  }
+}
+
+init();
+</script>
+</body>
+</html>
