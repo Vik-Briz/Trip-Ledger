@@ -77,6 +77,17 @@
     background:var(--paper);
   }
   .tag .tag-left{display:flex; align-items:center; gap:14px; min-width:0;}
+  .header-identity{
+    position:absolute; top:10px; right:14px;
+    display:flex; align-items:center; gap:8px;
+    font-size:11px; color:#DDD6C1;
+    background:rgba(18,49,40,0.35);
+    border:1px solid rgba(244,239,224,0.25);
+    border-radius:16px;
+    padding:4px 10px;
+    z-index:2;
+  }
+  .header-identity b{color:#F4EFE0;}
   .tag .glyph{
     font-size:28px; line-height:1;
     filter:drop-shadow(0 1px 0 rgba(0,0,0,0.25));
@@ -198,6 +209,13 @@
   .row-actions{width:34px; text-align:center;}
   .del{background:none; border:none; cursor:pointer; color:var(--ink-soft); font-size:15px; padding:2px 6px; border-radius:3px;}
   .del:hover{color:var(--danger); background:var(--danger-tint);}
+  .catch-day-date{font-size:9px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--rust); font-family:'IBM Plex Mono',monospace; margin-top:2px;}
+  .catch-cell{max-width:56px; text-align:center;}
+  .role-abbr-badge{
+    display:inline-block; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11px;
+    background:var(--pine-tint); color:var(--pine-deep); border-radius:4px; padding:2px 7px;
+  }
+  .person-role{max-width:52px; text-align:center; font-family:'IBM Plex Mono',monospace; font-weight:600;}
 
   .addrow{margin-top:10px;}
 
@@ -222,6 +240,21 @@
     border:1.5px dashed var(--line); border-radius:8px;
   }
 
+  .loading-screen{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; padding:80px 20px; text-align:center;
+  }
+  .loading-spinner{
+    width:36px; height:36px; border-radius:50%;
+    border:3px solid var(--line); border-top-color:var(--rust);
+    animation:spin 0.8s linear infinite;
+  }
+  .loading-msg{
+    font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
   .day-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
   .day-card{
     background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:14px;
@@ -233,6 +266,24 @@
   .day-card .day-title input{
     font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:14px;
     border:none; background:transparent; color:var(--pine-deep); font-weight:600; padding:2px 0; width:70%;
+  }
+  .day-date-formatted{
+    font-size:11px; color:var(--rust); font-weight:600; font-family:'Oswald',sans-serif;
+    letter-spacing:.03em; text-transform:uppercase; margin:-6px 0 10px;
+  }
+  .trip-start-row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;
+    background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 14px;
+  }
+  .trip-start-row label{
+    font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-family:'Oswald',sans-serif;
+  }
+  .trip-start-row input[type=date]{
+    border:1px solid var(--line); border-radius:4px; padding:5px 8px; font-size:12px;
+    font-family:'IBM Plex Mono',monospace; background:#fff; color:var(--ink);
+  }
+  .trip-date-range{
+    font-size:12px; color:var(--pine-deep); font-weight:600; margin-left:auto;
   }
   .meal-row{margin-bottom:8px;}
   .meal-row label{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-family:'Oswald',sans-serif;}
@@ -268,72 +319,36 @@
   .footer-note{margin-top:26px; text-align:center; font-size:11px; color:var(--ink-soft); font-style:italic;}
 
   @media (max-width:640px){
-    .tag{padding:18px 16px 16px 34px;}
+    .tag{padding:44px 16px 16px 34px;}
     .tag h1{max-width:60vw; font-size:18px;}
     .stat-chip{min-width:64px; padding:5px 10px;}
+    .header-identity{
+      position:absolute; top:8px; right:8px; left:8px;
+      justify-content:flex-end; font-size:10px; flex-wrap:wrap; row-gap:4px;
+    }
 
-    #app{padding:14px 10px 60px;}
-    .panel{padding:14px;}
-    .tabs{font-size:0;} /* let tab labels shrink via their own font-size below */
+    #app{padding:14px 8px 60px;}
+    .panel{padding:14px 8px;}
     .tab{padding:9px 10px; font-size:11px;}
 
-    /* Responsive "card" tables: hide the header row, stack each row as a
-       bordered card, and use data-label to show a mini-label per field. */
-    table{border:none;}
-    thead{display:none;}
-    table tr:not(.group-head){
-      display:block;
-      border:1px solid var(--line);
-      border-radius:8px;
-      margin-bottom:10px;
-      background:#fff;
-      overflow:hidden;
+    /* Keep the real table layout (same as desktop) so it's still easy to
+       tap straight into a cell while shopping — just let it scroll
+       sideways instead of squeezing or reflowing into cards. */
+    .table-scroll{
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      margin:0 -8px;
+      padding:0 8px;
     }
-    table tr.subtotal, table tr.grandtotal{ background:var(--paper-dark); }
-    table tr.grandtotal{ background:var(--pine-tint); }
-    table td{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      width:auto;
-      border-bottom:1px dashed var(--line-soft);
-      padding:8px 10px;
-    }
-    table td:last-child{border-bottom:none;}
-    table td.row-actions{justify-content:flex-end;}
-    table td.row-actions::before{content:none;}
-    table td[data-label]::before{
-      content:attr(data-label);
-      font-family:'Oswald',sans-serif;
-      font-size:9.5px;
-      letter-spacing:.06em;
-      text-transform:uppercase;
-      color:var(--ink-soft);
-      flex:none;
-      margin-right:8px;
-    }
-    table td input, table td select, table td textarea{
-      text-align:right;
-      max-width:60%;
-      margin-left:auto;
-    }
-    table td.num input{text-align:right;}
-    .computed-actual{font-weight:600;}
-    table tr.group-head{
-      border-radius:8px 8px 0 0;
-      margin-bottom:0;
-    }
-    table tr.group-head + tr{ display:none; } /* hide the (now-empty) header row under group-head on mobile */
-    table tr.group-head ~ tr:not(.subtotal){
-      border-radius:0;
-      margin-bottom:0;
-      border-top:none;
-    }
-    table tr.subtotal{ border-radius:0 0 8px 8px; }
+    .table-scroll table{ min-width:600px; }
+    .table-scroll table td, .table-scroll table th{ white-space:nowrap; }
+    .table-scroll table td input, .table-scroll table td select{ min-width:70px; }
+    .table-scroll table td.row-actions{ min-width:34px; }
+    .scroll-hint{ display:block; }
 
     .day-grid{grid-template-columns:1fr;}
   }
+  .scroll-hint{ display:none; font-size:11px; color:var(--ink-soft); font-style:italic; margin:-6px 0 8px; }
 </style>
 </head>
 <body>
@@ -480,6 +495,7 @@ function newTrip(name, type){
     createdAt: Date.now(),
     photo: null,               // base64 data URL of cover photo
     location: {name:'', mapsUrl:''},
+    startDate: '',              // ISO date (YYYY-MM-DD) — every day's date is derived from this
     costs: [
       {id:uid(), label:'Accommodation', budget:0, actual:0},
       {id:uid(), label:'Travel / Transport', budget:0, actual:0},
@@ -492,14 +508,57 @@ function newTrip(name, type){
       {id:uid(), label:'Day 1', breakfast:'', lunch:'', dinner:''},
     ],
     shopping: [],
+    catchLog: {},               // { [personId]: { [dayId]: count } } — days link straight to Meal Plan
   };
 }
 
 function ensureTripShape(t){
-  // backfill fields for trips saved before photo/location existed
+  // backfill fields for trips saved before photo/location/startDate/catchLog existed
   if(t.photo === undefined) t.photo = null;
   if(!t.location) t.location = {name:'', mapsUrl:''};
+  if(t.startDate === undefined) t.startDate = '';
+  if(!t.catchLog) t.catchLog = {};
   return t;
+}
+
+function getCatch(t, personId, dayId){
+  return (t.catchLog[personId] && Number(t.catchLog[personId][dayId])) || 0;
+}
+function setCatch(t, personId, dayId, value){
+  if(!t.catchLog[personId]) t.catchLog[personId] = {};
+  t.catchLog[personId][dayId] = Number(value)||0;
+}
+function catchTotalForPerson(t, personId){
+  return t.days.reduce((sum,d)=>sum + getCatch(t,personId,d.id), 0);
+}
+function catchTotalForDay(t, dayId){
+  return t.people.reduce((sum,p)=>sum + getCatch(t,p.id,dayId), 0);
+}
+function catchGrandTotal(t){
+  return t.people.reduce((sum,p)=>sum + catchTotalForPerson(t,p.id), 0);
+}
+
+/* A day's date is always derived from the trip's start date + its position
+   in the list — no per-day date field to keep in sync. */
+function toISODateLocal(d){
+  // Manual YYYY-MM-DD using LOCAL date parts — d.toISOString() converts to
+  // UTC first, which silently shifts the date back a day for any timezone
+  // ahead of UTC (e.g. Australia). This avoids that entirely.
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function dayDateFor(trip, index){
+  if(!trip.startDate) return '';
+  const d = new Date(trip.startDate + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + index);
+  return toISODateLocal(d);
+}
+function tripEndDate(trip){
+  if(!trip.startDate || !trip.days.length) return '';
+  return dayDateFor(trip, trip.days.length - 1);
 }
 
 /* ============================= Derived calculations ============================= */
@@ -547,6 +606,24 @@ function collectedTotal(trip){
 function owedFor(trip, person){
   const role = trip.roles.find(r=>r.id===person.roleId);
   return role ? Number(role.amount)||0 : 0;
+}
+
+// Short 1-2 letter code per role for compact display — e.g. "Vehicle
+// user" -> V, "Passenger" -> P. Falls back to two letters if the first
+// letter is already taken by another role.
+function roleAbbreviations(roles){
+  const used = {};
+  const map = {};
+  roles.forEach(r=>{
+    const label = (r.label||'?').trim();
+    let abbr = (label.charAt(0) || '?').toUpperCase();
+    if(used[abbr] && used[abbr] !== r.id){
+      abbr = label.slice(0,2).toUpperCase() || abbr;
+    }
+    used[abbr] = r.id;
+    map[r.id] = abbr;
+  });
+  return map;
 }
 
 /* ============================= Persistence ============================= */
@@ -607,13 +684,26 @@ async function init(){
 }
 
 async function loadTripsAndTrip(){
-  const idx = await storeGet('trips-index', true);
-  state.tripsIndex = idx || [];
-  const lastId = await storeGet('last-trip-id', false);
-  let tripToLoad = null;
-  if(lastId && state.tripsIndex.find(t=>t.id===lastId)){
-    tripToLoad = await storeGet('trip:'+lastId, true);
-  } else if(state.tripsIndex.length){
+  showLoading('Loading your trip…');
+  const lastId = await storeGet('last-trip-id', false); // local, instant
+
+  let idx, tripToLoad = null;
+  if(lastId){
+    // We already know which trip we probably want — fetch the index and
+    // that trip in parallel instead of waiting on the index first.
+    const [idxResult, tripResult] = await Promise.all([
+      storeGet('trips-index', true),
+      storeGet('trip:'+lastId, true),
+    ]);
+    idx = idxResult;
+    state.tripsIndex = idx || [];
+    if(state.tripsIndex.find(x=>x.id===lastId)) tripToLoad = tripResult;
+  } else {
+    idx = await storeGet('trips-index', true);
+    state.tripsIndex = idx || [];
+  }
+
+  if(!tripToLoad && state.tripsIndex.length){
     tripToLoad = await storeGet('trip:'+state.tripsIndex[0].id, true);
   }
   if(!tripToLoad){
@@ -625,23 +715,37 @@ async function loadTripsAndTrip(){
   render();
 }
 
+function showLoading(msg){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="loading-screen">
+      <div class="loading-spinner"></div>
+      <div class="loading-msg">${escapeHtml(msg||'Loading…')}</div>
+    </div>
+  `;
+}
+
 async function selectTrip(id){
+  showLoading('Switching trip…');
   const t = await storeGet('trip:'+id, true);
   if(t){
     state.trip = ensureTripShape(t);
     state.tab = 'overview';
     storeSet('last-trip-id', id, false);
-    render();
   }
+  render();
 }
 
 async function createTrip(name, type){
   if(!ADMIN) return;
+  showLoading('Creating trip…');
   const t = newTrip(name, type);
   state.tripsIndex.push({id:t.id, name:t.name, type:t.type, createdAt:t.createdAt});
-  await storeSet('trips-index', state.tripsIndex, true);
-  await storeSet('trip:'+t.id, t, true);
-  await storeSet('last-trip-id', t.id, false);
+  await Promise.all([
+    storeSet('trips-index', state.tripsIndex, true),
+    storeSet('trip:'+t.id, t, true),
+  ]);
+  storeSet('last-trip-id', t.id, false); // local, instant — no need to await
   state.trip = t;
   state.tab = 'overview';
   state.showNewTripModal = false;
@@ -696,8 +800,8 @@ function render(){
   const meta = TYPE_META[t.type] || TYPE_META.other;
 
   app.innerHTML = `
-    ${renderIdentityBadge()}
     <div class="tag">
+      ${renderIdentityBadge(true)}
       <div class="tag-left">
         <div class="cover-thumb" id="coverThumb" title="${ADMIN?'Click to add/change photo':''}" style="${ADMIN?'cursor:pointer':''}">
           ${t.photo ? `<img src="${t.photo}" alt="Trip photo">` : `<span class="glyph">${meta.glyph}</span>`}
@@ -711,6 +815,11 @@ function render(){
               ? `<a href="${escapeHtml(t.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(t.location.name)))}" target="_blank" rel="noopener">📍 ${escapeHtml(t.location.name)}</a>`
               : (ADMIN ? `<span class="loc-add" id="btnSetLocation">📍 Add location</span>` : '')}
             ${ADMIN && t.location && t.location.name ? `<span class="loc-edit" id="btnSetLocation">edit</span>` : ''}
+          </div>
+          <div class="loc-line">
+            ${t.startDate
+              ? `📅 ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}`
+              : (ADMIN ? `<span class="loc-add" id="btnGoSetDates">📅 Set trip dates</span>` : '')}
           </div>
         </div>
       </div>
@@ -758,6 +867,8 @@ function render(){
     photoInput.addEventListener('change', (e)=>handlePhotoUpload(e, t));
     const locBtn = document.getElementById('btnSetLocation');
     if(locBtn) locBtn.addEventListener('click', ()=>editLocation(t));
+    const datesBtn = document.getElementById('btnGoSetDates');
+    if(datesBtn) datesBtn.addEventListener('click', ()=>{ state.tab='meals'; render(); });
   }
   bindIdentityBadge();
 
@@ -777,9 +888,19 @@ function render(){
   }
 }
 
-function renderIdentityBadge(){
+function renderIdentityBadge(inHeader){
   const name = escapeHtml(state.identity.name);
-  const role = ADMIN ? 'Admin' : 'Viewer';
+  const role = ADMIN ? 'Admin' : 'Member';
+  if(inHeader){
+    return `
+      <div class="header-identity">
+        <span id="backendChip" class="backend-chip"></span>
+        <span>Viewing as <b>${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;">${role}</span></span>
+        ${ADMIN?'<button class="btn ghost sm" id="btnBackendSettings" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Change backend URL">⚙</button>':''}
+        <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
+      </div>
+    `;
+  }
   return `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
@@ -923,6 +1044,7 @@ function renderOverview(t){
     <div class="panel-section">
       <div class="section-head"><h2>Budget vs Actual</h2></div>
       <div class="section-note">Pulled from Trip Costs and every category on your Shopping List.</div>
+      <div class="table-scroll">
       <table>
         <thead><tr><th>Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
         <tbody>
@@ -935,6 +1057,7 @@ function renderOverview(t){
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
     <div class="panel-section">
       <div class="section-head"><h2>Collections</h2></div>
@@ -957,8 +1080,10 @@ function renderOverview(t){
 /* ---------- People & Payments ---------- */
 function renderPeople(t){
   const RO = ADMIN ? '' : 'disabled';
+  const abbrOf = roleAbbreviations(t.roles);
   let roleRows = t.roles.map(r=>`
     <tr data-role="${r.id}">
+      <td class="num" data-label="Code"><span class="role-abbr-badge">${escapeHtml(abbrOf[r.id])}</span></td>
       <td data-label="Role"><input type="text" class="role-label" value="${escapeHtml(r.label)}" placeholder="e.g. Vehicle user" ${RO}></td>
       <td class="num" data-label="Amount owed"><input type="number" class="role-amount" value="${r.amount}" placeholder="0" ${RO}></td>
       <td class="row-actions">${ADMIN?'<button class="del role-del" title="Remove role">✕</button>':''}</td>
@@ -971,14 +1096,15 @@ function renderPeople(t){
     const bal = owed - paid;
     const isMe = state.identity && p.name && p.name.trim().toLowerCase() === state.identity.name.trim().toLowerCase();
     const isAdminPerson = isAdminName(p.name);
+    const selectedRole = t.roles.find(r=>r.id===p.roleId);
     return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
       <td data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
       <td data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
-      <td data-label="Access"><span class="access-badge ${isAdminPerson?'admin':'viewer'}">${isAdminPerson?'Admin':'Viewer'}</span></td>
+      <td data-label="Access"><span class="access-badge ${isAdminPerson?'admin':'viewer'}">${isAdminPerson?'Admin':'Member'}</span></td>
       <td data-label="Role">
-        <select class="person-role" ${RO}>
-          <option value="">— choose —</option>
-          ${t.roles.map(r=>`<option value="${r.id}" ${r.id===p.roleId?'selected':''}>${escapeHtml(r.label)} (${money(r.amount)})</option>`).join('')}
+        <select class="person-role" ${RO} title="${selectedRole?escapeHtml(selectedRole.label):'Choose a role'}">
+          <option value="">—</option>
+          ${t.roles.map(r=>`<option value="${r.id}" ${r.id===p.roleId?'selected':''}>${escapeHtml(abbrOf[r.id])}</option>`).join('')}
         </select>
       </td>
       <td class="num" data-label="Owed">${money(owed)}</td>
@@ -998,8 +1124,8 @@ function renderPeople(t){
       </div>
       <div class="section-note">Define what each type of member owes — e.g. Vehicle user vs Passenger, or a flat share.</div>
       <table>
-        <thead><tr><th>Role</th><th class="num">Amount owed</th><th></th></tr></thead>
-        <tbody>${roleRows || `<tr><td colspan="3" style="text-align:center;color:var(--ink-soft);font-style:italic;">No roles yet.</td></tr>`}</tbody>
+        <thead><tr><th class="num">Code</th><th>Role</th><th class="num">Amount owed</th><th></th></tr></thead>
+        <tbody>${roleRows || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);font-style:italic;">No roles yet.</td></tr>`}</tbody>
       </table>
     </div>
     <div class="panel-section">
@@ -1007,6 +1133,7 @@ function renderPeople(t){
         ${ADMIN?'<button class="btn ghost sm" id="addPerson">+ Add member</button>':''}
       </div>
       <div class="section-note">Access is automatic — it's based on whether a member's name matches the admin list, not something you set here.</div>
+      <div class="table-scroll">
       <table>
         <thead><tr><th>Name</th><th>Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
         <tbody>
@@ -1020,6 +1147,62 @@ function renderPeople(t){
           </tr>
         </tbody>
       </table>
+      </div>
+    </div>
+    ${renderCatchLog(t)}
+  `;
+}
+
+/* ---------- Catch Log ---------- */
+function renderCatchLog(t){
+  const RO = ADMIN ? '' : 'disabled';
+
+  if(!t.people.length || !t.days.length){
+    return `
+      <div class="panel-section">
+        <div class="section-head"><h2>Catch Log</h2></div>
+        <div class="empty">Add members and days (in Meal Plan) to start logging catches.</div>
+      </div>
+    `;
+  }
+
+  const dayHeaders = t.days.map((d,i)=>{
+    const dateLabel = t.startDate ? formatDayDate(dayDateFor(t,i)) : '';
+    return `<th class="num">${escapeHtml(d.label)}${dateLabel?`<div class="catch-day-date">${dateLabel}</div>`:''}</th>`;
+  }).join('');
+
+  const rows = t.people.map(p=>{
+    const cells = t.days.map(d=>`
+      <td class="num" data-label="${escapeHtml(d.label)}">
+        <input type="number" min="0" class="catch-cell" data-catch-person="${p.id}" data-catch-day="${d.id}" value="${getCatch(t,p.id,d.id)||''}" placeholder="0" ${RO}>
+      </td>
+    `).join('');
+    return `<tr>
+      <td data-label="Member">${escapeHtml(p.name || '(unnamed)')}</td>
+      ${cells}
+      <td class="num" data-label="Total"><b>${catchTotalForPerson(t,p.id)}</b></td>
+    </tr>`;
+  }).join('');
+
+  const dayTotalCells = t.days.map(d=>`<td class="num" data-label="${escapeHtml(d.label)}">${catchTotalForDay(t,d.id)}</td>`).join('');
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>Catch Log</h2></div>
+      <div class="section-note">One row per member, one column per day — days link straight from the Meal Plan, so add/rename days there.</div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th>Member</th>${dayHeaders}<th class="num">Total</th></tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="subtotal">
+            <td>Daily total</td>
+            ${dayTotalCells}
+            <td class="num"><b>${catchGrandTotal(t)}</b></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
     </div>
   `;
 }
@@ -1045,6 +1228,7 @@ function renderCosts(t){
         ${ADMIN?'<button class="btn ghost sm" id="addCost">+ Add cost line</button>':''}
       </div>
       <div class="section-note">Accommodation, travel, permits, fuel, hire gear — anything that isn't a shopping-list item. Food/Alcohol/Misc show up automatically from your Shopping List.</div>
+      <div class="table-scroll">
       <table>
         <thead><tr><th>Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
         <tbody>
@@ -1058,19 +1242,28 @@ function renderCosts(t){
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   `;
 }
 
 /* ---------- Meal Plan ---------- */
+function formatDayDate(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+}
+
 function renderMeals(t){
   const RO = ADMIN ? '' : 'disabled';
-  const cards = t.days.map(d=>`
+  const cards = t.days.map((d,i)=>`
     <div class="day-card" data-day="${d.id}">
       <div class="day-title">
         <input type="text" class="day-label" value="${escapeHtml(d.label)}" ${RO}>
         ${ADMIN?'<button class="del day-del" title="Remove day">✕</button>':''}
       </div>
+      ${t.startDate ? `<div class="day-date-formatted">${formatDayDate(dayDateFor(t,i))}</div>` : ''}
       <div class="meal-row"><label>Breakfast</label><textarea class="meal-breakfast" rows="2" ${RO}>${escapeHtml(d.breakfast)}</textarea></div>
       <div class="meal-row"><label>Lunch</label><textarea class="meal-lunch" rows="2" ${RO}>${escapeHtml(d.lunch)}</textarea></div>
       <div class="meal-row" style="margin-bottom:0"><label>Dinner</label><textarea class="meal-dinner" rows="2" ${RO}>${escapeHtml(d.dinner)}</textarea></div>
@@ -1081,6 +1274,12 @@ function renderMeals(t){
     <div class="panel-section">
       <div class="section-head"><h2>Meal Plan</h2>
         ${ADMIN?'<button class="btn ghost sm" id="addDay">+ Add day</button>':''}
+      </div>
+      <div class="section-note">Set the trip's start date once — each day below (and the header) will date itself automatically.</div>
+      <div class="trip-start-row">
+        <label for="tripStartDate">Trip start date</label>
+        <input type="date" id="tripStartDate" value="${escapeHtml(t.startDate||'')}" ${RO}>
+        ${t.startDate ? `<span class="trip-date-range">${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}</span>` : ''}
       </div>
       <div class="day-grid">
         ${cards || `<div class="empty">No days added yet — add your first day of the trip.</div>`}
@@ -1133,10 +1332,13 @@ function renderShopping(t){
         </div>
       </div>
       <div class="section-note">Budget is the planned line total. Enter Cost/Unit as you shop — Actual (Qty × Cost/Unit) calculates itself.</div>
+      <div class="scroll-hint">↔ Swipe sideways to see all columns</div>
+      <div class="table-scroll">
       ${body}
       <table><tbody>
         <tr class="grandtotal"><td colspan="3">Grand Total</td><td class="num" data-label="Budget">${money2(totals.budget)}</td><td></td><td class="num" data-label="Actual">${money2(totals.actual)}</td><td></td></tr>
       </tbody></table>
+      </div>
       <datalist id="catList">${catList.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
       <datalist id="storeList">${storeList.map(s=>`<option value="${escapeHtml(s)}">`).join('')}</datalist>
     </div>
@@ -1210,6 +1412,15 @@ function bindPanelEvents(){
     t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0}); scheduleSave(); renderPanel();
   });
 
+  // CATCH LOG
+  qa('.catch-cell').forEach(el=>{
+    el.addEventListener('input', e=>{
+      setCatch(t, e.target.dataset.catchPerson, e.target.dataset.catchDay, e.target.value);
+      scheduleSave();
+    });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+
   // COSTS
   qa('.cost-label').forEach(el=>el.addEventListener('input', e=>{
     findCost(t, rowId(e)).label = e.target.value; scheduleSave();
@@ -1231,6 +1442,7 @@ function bindPanelEvents(){
 
   // MEALS
   qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
+  id('tripStartDate') && id('tripStartDate').addEventListener('change', e=>{ t.startDate = e.target.value; scheduleSave(); renderPanel(); });
   qa('.meal-breakfast').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).breakfast = e.target.value; scheduleSave(); }));
   qa('.meal-lunch').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).lunch = e.target.value; scheduleSave(); }));
   qa('.meal-dinner').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).dinner = e.target.value; scheduleSave(); }));
@@ -1238,7 +1450,7 @@ function bindPanelEvents(){
     const idv = rowId(e,'day'); t.days = t.days.filter(d=>d.id!==idv); scheduleSave(); renderPanel();
   }));
   id('addDay') && id('addDay').addEventListener('click', ()=>{
-    t.days.push({id:uid(), label:'Day '+(t.days.length+1), breakfast:'', lunch:'', dinner:''}); scheduleSave(); renderPanel();
+    t.days.push({id:uid(), label:'Day '+(t.days.length+1), date:'', breakfast:'', lunch:'', dinner:''}); scheduleSave(); renderPanel();
   });
 
   // SHOPPING
@@ -1464,6 +1676,7 @@ function bindImportModal(t){
 
 function applyImport(t, data){
   if(data.name) t.name = String(data.name);
+  if(data.startDate !== undefined) t.startDate = String(data.startDate||'');
   if(data.location){
     t.location = {name: data.location.name||'', mapsUrl: data.location.mapsUrl||''};
   }
