@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>Trip Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -318,7 +318,7 @@
 
   .footer-note{margin-top:26px; text-align:center; font-size:11px; color:var(--ink-soft); font-style:italic;}
 
-  @media (max-width:640px){
+  @media (max-width:640px), (max-height:520px) and (orientation:landscape){
     .tag{padding:44px 16px 16px 34px;}
     .tag h1{max-width:60vw; font-size:18px;}
     .stat-chip{min-width:64px; padding:5px 10px;}
@@ -327,32 +327,138 @@
       justify-content:flex-end; font-size:10px; flex-wrap:wrap; row-gap:4px;
     }
 
-    #app{padding:14px 8px 60px;}
+    #app{padding:14px 8px 60px; max-width:100%; overflow-x:hidden;}
     .panel{padding:14px 8px;}
     .tab{padding:9px 10px; font-size:11px;}
 
-    /* Keep the real table layout (same as desktop) so it's still easy to
-       tap straight into a cell while shopping — just let it scroll
-       sideways instead of squeezing or reflowing into cards. */
-    .table-scroll{
-      overflow-x:auto;
-      -webkit-overflow-scrolling:touch;
-      margin:0 -8px;
-      padding:0 8px;
+    /* No horizontal scrolling anywhere in content — tables reflow into
+       stacked cards (label above each value) so everything only ever
+       scrolls vertically. Swipe left/right on the page instead to move
+       between tabs (see the touch handler in the script). */
+    .table-scroll{ overflow-x:visible; margin:0; padding:0; }
+    table{border:none;}
+    thead{display:none;}
+    table tr:not(.group-head){
+      display:block;
+      border:1px solid var(--line);
+      border-radius:8px;
+      margin-bottom:10px;
+      background:#fff;
+      overflow:hidden;
     }
-    .table-scroll table{ min-width:600px; }
-    .table-scroll table td, .table-scroll table th{ white-space:nowrap; }
-    .table-scroll table td input, .table-scroll table td select{ min-width:70px; }
-    .table-scroll table td.row-actions{ min-width:34px; }
-    .scroll-hint{ display:block; }
+    table tr.subtotal, table tr.grandtotal{ background:var(--paper-dark); }
+    table tr.grandtotal{ background:var(--pine-tint); }
+    table td{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      width:auto;
+      white-space:normal;
+      border-bottom:1px dashed var(--line-soft);
+      padding:8px 10px;
+    }
+    table td:last-child{border-bottom:none;}
+    table td.row-actions{justify-content:flex-end;}
+    table td.row-actions::before{content:none;}
+    table td[data-label]::before{
+      content:attr(data-label);
+      font-family:'Oswald',sans-serif;
+      font-size:9.5px;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      color:var(--ink-soft);
+      flex:none;
+      margin-right:8px;
+    }
+    table td input, table td select, table td textarea{
+      text-align:right;
+      max-width:60%;
+      margin-left:auto;
+      min-width:0;
+    }
+    table td.num input{text-align:right;}
+    .computed-actual{font-weight:600;}
+    table tr.group-head{
+      border-radius:8px 8px 0 0;
+      margin-bottom:0;
+    }
+    table tr.group-head + tr{ display:none; }
+    table tr.group-head ~ tr:not(.subtotal){
+      border-radius:0;
+      margin-bottom:0;
+      border-top:none;
+    }
+    table tr.subtotal{ border-radius:0 0 8px 8px; }
+    .scroll-hint{ display:none; }
 
-    .day-grid{grid-template-columns:1fr;}
+    /* Meal Plan days stack vertically too — no side-to-side swiping
+       inside the page, that gesture is reserved for switching tabs. */
+    .day-grid{
+      display:block;
+    }
+    .day-grid .day-card{
+      max-width:100%;
+      margin-bottom:14px;
+    }
+
+    /* Catch Log's per-item quad grid stays compact within the stacked card */
+    table tr[data-item]{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      column-gap:12px;
+      row-gap:0;
+      padding:10px 34px 8px 12px;
+      position:relative;
+    }
+    table tr[data-item] td{
+      display:block;
+      border-bottom:none;
+      padding:3px 0;
+    }
+    table tr[data-item] td[data-label="Item"],
+    table tr[data-item] td[data-label="Store"],
+    table tr[data-item] td[data-label="Category"]{
+      grid-column:1 / -1;
+    }
+    table tr[data-item] td[data-label="Item"]::before,
+    table tr[data-item] td[data-label="Store"]::before,
+    table tr[data-item] td[data-label="Category"]::before{
+      content:none;
+    }
+    table tr[data-item] td[data-label="Item"] input{
+      font-weight:600; color:var(--pine-deep); text-align:left; max-width:100%; margin-left:0;
+    }
+    table tr[data-item] td[data-label="Store"] input,
+    table tr[data-item] td[data-label="Category"] input{
+      font-size:12px; color:var(--ink-soft); text-align:left; max-width:100%; margin-left:0;
+    }
+    table tr[data-item] td.num{
+      justify-content:flex-start; flex-direction:column; align-items:flex-start;
+    }
+    table tr[data-item] td.num input, table tr[data-item] .computed-actual{
+      text-align:left; max-width:100%; margin-left:0;
+    }
+    table tr[data-item] td.row-actions{
+      position:absolute; top:6px; right:4px; padding:0;
+    }
   }
   .scroll-hint{ display:none; font-size:11px; color:var(--ink-soft); font-style:italic; margin:-6px 0 8px; }
+  .tab-swipe-dots{ display:none; }
+  @media (max-width:640px), (max-height:520px) and (orientation:landscape){
+    .tab-swipe-dots{
+      display:flex; justify-content:center; gap:6px; margin:14px 0 4px;
+    }
+    .tab-swipe-dots span{
+      width:6px; height:6px; border-radius:50%; background:var(--line);
+    }
+    .tab-swipe-dots span.active{ background:var(--pine); }
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
+
 
 <script>
 /* ============================= Storage helpers ============================= */
@@ -458,6 +564,7 @@ function money(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{mi
 function money2(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 
 const ADMIN_NAMES = ['vikash deo','neville reddy','gavin ponusamy'];
+const TAB_ORDER = ['overview','people','costs','meals','shopping'];
 
 /* ============================= App state ============================= */
 const state = {
@@ -667,6 +774,52 @@ async function clearIdentity(){
   render();
 }
 
+/* ============================= Swipe-to-switch-tabs ============================= */
+/* Attached once to #app itself (never replaced by render(), only its
+   innerHTML is), so this survives every re-render. Horizontal swipes move
+   between tabs; anything that isn't a clean, mostly-horizontal, fast-enough
+   gesture is ignored so normal vertical scrolling and text selection still
+   work as expected. */
+function setupSwipeNav(){
+  const app = document.getElementById('app');
+  let startX = 0, startY = 0, startTime = 0, active = false;
+  const SWIPE_MIN_DISTANCE = 60;   // px
+  const SWIPE_MAX_OFF_AXIS = 70;   // px of vertical drift still counts as "horizontal"
+  const SWIPE_MAX_TIME = 700;      // ms
+
+  app.addEventListener('touchstart', e=>{
+    if(e.touches.length !== 1) { active = false; return; }
+    const tag = (e.target.tagName||'').toLowerCase();
+    if(tag === 'input' || tag === 'textarea' || tag === 'select'){ active = false; return; }
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY; startTime = Date.now();
+    active = true;
+  }, {passive:true});
+
+  app.addEventListener('touchend', e=>{
+    if(!active || !state.trip) return;
+    active = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const dt = Date.now() - startTime;
+    if(dt > SWIPE_MAX_TIME) return;
+    if(Math.abs(dy) > SWIPE_MAX_OFF_AXIS) return;
+    if(Math.abs(dx) < SWIPE_MIN_DISTANCE) return;
+    swipeToTab(dx < 0 ? 1 : -1);
+  }, {passive:true});
+}
+function swipeToTab(direction){
+  const idx = TAB_ORDER.indexOf(state.tab);
+  const next = idx + direction;
+  if(next < 0 || next >= TAB_ORDER.length) return;
+  state.tab = TAB_ORDER[next];
+  state.showNewTripModal = false;
+  state.showImportModal = false;
+  render();
+}
+
+setupSwipeNav();
 async function init(){
   if(!getBackendUrl()){
     state.loaded = true;
@@ -847,7 +1000,8 @@ function render(){
       ${tabBtn('shopping','Shopping List')}
     </div>
     <div class="panel" id="panel"></div>
-    <div class="footer-note">${ADMIN ? 'Everything here is saved automatically as you type — for your next fishing or camping trip, just hit "+ New".' : 'You\u2019re viewing this trip as a read-only member. Only admins can make changes.'}</div>
+    <div class="tab-swipe-dots">${TAB_ORDER.map(k=>`<span class="${k===state.tab?'active':''}"></span>`).join('')}</div>
+    <div class="footer-note">${ADMIN ? 'Everything here is saved automatically as you type — for your next fishing or camping trip, just hit "+ New". Swipe left/right to switch tabs.' : 'You\u2019re viewing this trip as a read-only member. Only admins can make changes.'}</div>
   `;
 
   document.getElementById('tripSwitch').addEventListener('change', e=>selectTrip(e.target.value));
@@ -1332,7 +1486,6 @@ function renderShopping(t){
         </div>
       </div>
       <div class="section-note">Budget is the planned line total. Enter Cost/Unit as you shop — Actual (Qty × Cost/Unit) calculates itself.</div>
-      <div class="scroll-hint">↔ Swipe sideways to see all columns</div>
       <div class="table-scroll">
       ${body}
       <table><tbody>
