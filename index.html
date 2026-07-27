@@ -185,7 +185,11 @@
   .section-note{font-size:11.5px; color:var(--ink-soft); font-style:italic; margin-top:-6px; margin-bottom:14px;}
 
   table{width:100%; border-collapse:collapse;}
-  th:first-child, td:first-child{width:26%; min-width:170px;}
+  .wide-col{width:26%; min-width:170px;}
+  .check-col{width:34px; text-align:center; padding-left:4px; padding-right:4px;}
+  .check-col input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
+  tr.purchased-row .item-name{text-decoration:line-through; opacity:0.55;}
+  tr.purchased-row td{opacity:0.75;}
   th{
     text-align:left; font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
     color:var(--ink-soft); border-bottom:2px solid var(--line); padding:8px 8px;
@@ -197,6 +201,12 @@
     background:var(--pine-deep); color:#F4EFE0; font-family:'Oswald',sans-serif; text-transform:uppercase;
     letter-spacing:.05em; font-size:12px; padding-top:8px; padding-bottom:8px;
   }
+  .group-head-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .group-add-btn{
+    background:transparent; color:#F4EFE0; border-color:rgba(244,239,224,0.5);
+    text-transform:none; letter-spacing:normal; font-size:11px; padding:4px 10px;
+  }
+  .group-add-btn:hover{background:rgba(244,239,224,0.15);}
   td input[type=text], td input[type=number], td select{
     width:100%; border:1px solid transparent; background:transparent; padding:5px 6px; border-radius:3px;
     color:var(--ink); font-size:13px;
@@ -570,11 +580,12 @@ function newTrip(name, type){
 }
 
 function ensureTripShape(t){
-  // backfill fields for trips saved before photo/location/startDate/catchLog existed
+  // backfill fields for trips saved before photo/location/startDate/catchLog/purchased existed
   if(t.photo === undefined) t.photo = null;
   if(!t.location) t.location = {name:'', mapsUrl:''};
   if(t.startDate === undefined) t.startDate = '';
   if(!t.catchLog) t.catchLog = {};
+  if(Array.isArray(t.shopping)) t.shopping.forEach(i=>{ if(i.purchased===undefined) i.purchased=false; });
   return t;
 }
 
@@ -1129,7 +1140,7 @@ function renderOverview(t){
   t.costs.forEach(c=>{
     const variance = (Number(c.actual)||0) - (Number(c.budget)||0);
     rows += `<tr>
-      <td data-label="Category">${escapeHtml(c.label)}</td>
+      <td class="wide-col" data-label="Category">${escapeHtml(c.label)}</td>
       <td class="num" data-label="Budget">${money(c.budget)}</td>
       <td class="num" data-label="Actual">${money(c.actual)}</td>
       <td class="num ${variance>0?'neg':'pos'}" data-label="Variance">${variance>0?'+':''}${money(variance)}</td>
@@ -1138,7 +1149,7 @@ function renderOverview(t){
   catGroups.forEach(gr=>{
     const variance = gr.actual - gr.budget;
     rows += `<tr>
-      <td data-label="Category">${escapeHtml(gr.label)} <span class="section-note" style="margin:0">(shopping)</span></td>
+      <td class="wide-col" data-label="Category">${escapeHtml(gr.label)} <span class="section-note" style="margin:0">(shopping)</span></td>
       <td class="num" data-label="Budget">${money(gr.budget)}</td>
       <td class="num" data-label="Actual">${money(gr.actual)}</td>
       <td class="num ${variance>0?'neg':'pos'}" data-label="Variance">${variance>0?'+':''}${money(variance)}</td>
@@ -1151,11 +1162,11 @@ function renderOverview(t){
       <div class="section-note">Pulled from Trip Costs and every category on your Shopping List.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
+        <thead><tr><th class="wide-col">Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
         <tbody>
           ${rows || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);font-style:italic;">Add cost lines or shopping items to see them here.</td></tr>`}
           <tr class="grandtotal">
-            <td data-label="Category">Grand Total</td>
+            <td class="wide-col" data-label="Category">Grand Total</td>
             <td class="num" data-label="Budget">${money(g.budget)}</td>
             <td class="num" data-label="Actual">${money(g.actual)}</td>
             <td class="num ${(g.actual-g.budget)>0?'neg':'pos'}" data-label="Variance">${(g.actual-g.budget)>0?'+':''}${money(g.actual-g.budget)}</td>
@@ -1203,7 +1214,7 @@ function renderPeople(t){
     const isAdminPerson = isAdminName(p.name);
     const selectedRole = t.roles.find(r=>r.id===p.roleId);
     return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
-      <td data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
+      <td class="wide-col" data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
       <td data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
       <td data-label="Access"><span class="access-badge ${isAdminPerson?'admin':'viewer'}">${isAdminPerson?'Admin':'Member'}</span></td>
       <td data-label="Role">
@@ -1240,7 +1251,7 @@ function renderPeople(t){
       <div class="section-note">Access is automatic — it's based on whether a member's name matches the admin list, not something you set here.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Name</th><th>Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
+        <thead><tr><th class="wide-col">Name</th><th>Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
         <tbody>
           ${peopleRows || `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);font-style:italic;">No members added yet.</td></tr>`}
           <tr class="subtotal">
@@ -1319,7 +1330,7 @@ function renderCosts(t){
   let rows = t.costs.map(c=>{
     const variance = (Number(c.actual)||0)-(Number(c.budget)||0);
     return `<tr data-cost="${c.id}">
-      <td data-label="Item"><input type="text" class="cost-label" value="${escapeHtml(c.label)}" placeholder="e.g. Accommodation" ${RO}></td>
+      <td class="wide-col" data-label="Item"><input type="text" class="cost-label" value="${escapeHtml(c.label)}" placeholder="e.g. Accommodation" ${RO}></td>
       <td class="num" data-label="Budget"><input type="number" class="cost-budget" value="${c.budget||0}" ${RO}></td>
       <td class="num" data-label="Actual"><input type="number" class="cost-actual" value="${c.actual||0}" ${RO}></td>
       <td class="num ${variance>0?'neg':'pos'}" data-label="Variance">${variance>0?'+':''}${money(variance)}</td>
@@ -1335,7 +1346,7 @@ function renderCosts(t){
       <div class="section-note">Accommodation, travel, permits, fuel, hire gear — anything that isn't a shopping-list item. Food/Alcohol/Misc show up automatically from your Shopping List.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th>Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
+        <thead><tr><th class="wide-col">Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
         <tbody>
           ${rows || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);font-style:italic;">No cost lines yet.</td></tr>`}
           <tr class="subtotal">
@@ -1398,6 +1409,7 @@ function renderShopping(t){
   const totals = shoppingTotals(t);
   const catList = [...new Set(t.shopping.map(i=>i.category).filter(Boolean))];
   const storeList = [...new Set(t.shopping.map(i=>i.store).filter(Boolean))];
+  const colHeaders = `<th class="check-col"></th><th class="wide-col">Item</th><th>Store</th><th>Category</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Cost/Unit</th><th class="num">Actual</th><th></th>`;
 
   let body = '';
   if(!t.shopping.length){
@@ -1405,21 +1417,33 @@ function renderShopping(t){
   } else if(state.shoppingView==='category'){
     const groups = groupShopping(t,'category');
     groups.forEach(gr=>{
+      const groupKey = escapeHtml(gr.label);
       body += `<table style="margin-bottom:18px"><tbody>
-        <tr class="group-head"><td colspan="7">${escapeHtml(gr.label)}</td></tr>
-        <tr><th>Item</th><th>Store</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Cost/Unit</th><th class="num">Actual</th><th></th></tr>
+        <tr class="group-head"><td colspan="9">
+          <div class="group-head-row">
+            <span>${groupKey}</span>
+            ${ADMIN?`<button class="btn ghost sm group-add-btn" data-add-category="${groupKey}">+ Add</button>`:''}
+          </div>
+        </td></tr>
+        <tr>${colHeaders}</tr>
         ${gr.items.map(itemRow).join('')}
-        <tr class="subtotal"><td colspan="3">Subtotal</td><td class="num" data-label="Budget">${money2(gr.budget)}</td><td></td><td class="num" data-label="Actual">${money2(gr.actual)}</td><td></td></tr>
+        <tr class="subtotal"><td colspan="5">Subtotal</td><td class="num" data-label="Budget">${money2(gr.budget)}</td><td></td><td class="num" data-label="Actual">${money2(gr.actual)}</td><td></td></tr>
       </tbody></table>`;
     });
   } else {
     const groups = groupShopping(t,'store');
     groups.forEach(gr=>{
+      const groupKey = escapeHtml(gr.label);
       body += `<table style="margin-bottom:18px"><tbody>
-        <tr class="group-head"><td colspan="7">${escapeHtml(gr.label)}</td></tr>
-        <tr><th>Item</th><th>Category</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Cost/Unit</th><th class="num">Actual</th><th></th></tr>
-        ${gr.items.map(itemRowStoreView).join('')}
-        <tr class="subtotal"><td colspan="3">Subtotal</td><td class="num" data-label="Budget">${money2(gr.budget)}</td><td></td><td class="num" data-label="Actual">${money2(gr.actual)}</td><td></td></tr>
+        <tr class="group-head"><td colspan="9">
+          <div class="group-head-row">
+            <span>${groupKey}</span>
+            ${ADMIN?`<button class="btn ghost sm group-add-btn" data-add-store="${groupKey}">+ Add</button>`:''}
+          </div>
+        </td></tr>
+        <tr>${colHeaders}</tr>
+        ${gr.items.map(itemRow).join('')}
+        <tr class="subtotal"><td colspan="5">Subtotal</td><td class="num" data-label="Budget">${money2(gr.budget)}</td><td></td><td class="num" data-label="Actual">${money2(gr.actual)}</td><td></td></tr>
       </tbody></table>`;
     });
   }
@@ -1433,15 +1457,15 @@ function renderShopping(t){
             <button data-view="category" class="${state.shoppingView==='category'?'active':''}">By Category</button>
             <button data-view="store" class="${state.shoppingView==='store'?'active':''}">By Store</button>
           </div>
-          ${ADMIN?'<button class="btn ghost sm" id="addItem">+ Add item</button>':''}
+          ${ADMIN?'<button class="btn ghost sm" id="addItem">+ Add uncategorised item</button>':''}
         </div>
       </div>
-      <div class="section-note">Budget is the planned line total. Enter Cost/Unit as you shop — Actual (Qty × Cost/Unit) calculates itself.</div>
+      <div class="section-note">Tick items off as you buy them. Spot something in the wrong group? Change its Store or Category right in the row and it'll move there automatically.</div>
       <div class="scroll-hint">↔ Swipe inside the table to see all columns</div>
       <div class="table-scroll">
       ${body}
       <table><tbody>
-        <tr class="grandtotal"><td colspan="3">Grand Total</td><td class="num" data-label="Budget">${money2(totals.budget)}</td><td></td><td class="num" data-label="Actual">${money2(totals.actual)}</td><td></td></tr>
+        <tr class="grandtotal"><td colspan="5">Grand Total</td><td class="num" data-label="Budget">${money2(totals.budget)}</td><td></td><td class="num" data-label="Actual">${money2(totals.actual)}</td><td></td></tr>
       </tbody></table>
       </div>
       <datalist id="catList">${catList.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
@@ -1453,21 +1477,10 @@ function renderShopping(t){
 function itemRow(item){
   const RO = ADMIN ? '' : 'disabled';
   const lineActual = (Number(item.qty)||0) * (Number(item.unitActual)||0);
-  return `<tr data-item="${item.id}">
-    <td data-label="Item"><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
+  return `<tr data-item="${item.id}" class="${item.purchased?'purchased-row':''}">
+    <td class="check-col" data-label=""><input type="checkbox" class="item-purchased" ${item.purchased?'checked':''} title="Purchased" ${RO}></td>
+    <td class="wide-col" data-label="Item"><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
     <td data-label="Store"><input type="text" class="item-store" list="storeList" value="${escapeHtml(item.store||'')}" placeholder="Store" ${RO}></td>
-    <td class="num" data-label="Qty"><input type="number" class="item-qty" value="${item.qty??1}" ${RO}></td>
-    <td class="num" data-label="Budget"><input type="number" class="item-budget" value="${item.budget||0}" ${RO}></td>
-    <td class="num" data-label="Cost/Unit"><input type="number" step="0.01" class="item-unit" value="${item.unitActual||0}" title="Cost per unit" ${RO}></td>
-    <td class="num" data-label="Actual"><span class="computed-actual">${money2(lineActual)}</span></td>
-    <td class="row-actions">${ADMIN?'<button class="del item-del" title="Remove">✕</button>':''}</td>
-  </tr>`;
-}
-function itemRowStoreView(item){
-  const RO = ADMIN ? '' : 'disabled';
-  const lineActual = (Number(item.qty)||0) * (Number(item.unitActual)||0);
-  return `<tr data-item="${item.id}">
-    <td data-label="Item"><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
     <td data-label="Category"><input type="text" class="item-category" list="catList" value="${escapeHtml(item.category||'')}" placeholder="Category" ${RO}></td>
     <td class="num" data-label="Qty"><input type="number" class="item-qty" value="${item.qty??1}" ${RO}></td>
     <td class="num" data-label="Budget"><input type="number" class="item-budget" value="${item.budget||0}" ${RO}></td>
@@ -1563,8 +1576,14 @@ function bindPanelEvents(){
     el.addEventListener('click', ()=>{ state.shoppingView = el.dataset.view; renderPanel(); });
   });
   qa('.item-name').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).item = e.target.value; scheduleSave(); }));
-  qa('.item-store').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).store = e.target.value; scheduleSave(); }));
-  qa('.item-category').forEach(el=>el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).category = e.target.value; scheduleSave(); }));
+  qa('.item-store').forEach(el=>{
+    el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).store = e.target.value; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
+  qa('.item-category').forEach(el=>{
+    el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).category = e.target.value; scheduleSave(); });
+    el.addEventListener('change', ()=>renderPanel());
+  });
   qa('.item-qty').forEach(el=>{
     el.addEventListener('input', e=>{ findItem(t, rowId(e,'item')).qty = parseFloat(e.target.value)||0; scheduleSave(); });
     el.addEventListener('change', ()=>renderPanel());
@@ -1580,9 +1599,20 @@ function bindPanelEvents(){
   qa('.item-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e,'item'); t.shopping = t.shopping.filter(i=>i.id!==idv); scheduleSave(); renderPanel();
   }));
+  qa('.item-purchased').forEach(el=>el.addEventListener('change', e=>{
+    findItem(t, rowId(e,'item')).purchased = e.target.checked; scheduleSave(); renderPanel();
+  }));
   id('addItem') && id('addItem').addEventListener('click', ()=>{
-    t.shopping.push({id:uid(), item:'', category:'', store:'', qty:1, budget:0, unitActual:0}); scheduleSave(); state.shoppingView='category'; renderPanel();
+    t.shopping.push({id:uid(), item:'', category:'', store:'', qty:1, budget:0, unitActual:0, purchased:false}); scheduleSave(); state.shoppingView='category'; renderPanel();
   });
+  qa('.group-add-btn').forEach(el=>el.addEventListener('click', ()=>{
+    if(el.dataset.addCategory !== undefined){
+      t.shopping.push({id:uid(), item:'', category:el.dataset.addCategory, store:'', qty:1, budget:0, unitActual:0, purchased:false});
+    } else if(el.dataset.addStore !== undefined){
+      t.shopping.push({id:uid(), item:'', category:'', store:el.dataset.addStore, qty:1, budget:0, unitActual:0, purchased:false});
+    }
+    scheduleSave(); renderPanel();
+  }));
 }
 
 function qa(sel){ return Array.from(document.querySelectorAll(sel)); }
@@ -1817,6 +1847,7 @@ function applyImport(t, data){
       qty: s.qty===undefined ? 1 : Number(s.qty),
       budget: Number(s.budget)||0,
       unitActual: Number(s.unitActual)||0,
+      purchased: !!s.purchased,
     }));
   }
 }
