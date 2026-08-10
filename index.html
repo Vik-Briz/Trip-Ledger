@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-<title>Trip Ledger</title>
+<title>My Trip Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -135,6 +135,14 @@
   .stat-chip span{font-size:9px; letter-spacing:.08em; text-transform:uppercase; opacity:.7;}
   .stat-chip.warn{background:rgba(193,98,43,0.25); border-color:rgba(193,98,43,0.55);}
   .stat-chip.ok{background:rgba(70,130,100,0.25); border-color:rgba(70,130,100,0.5);}
+  .stat-chip.sm{
+    background:var(--paper-dark); border:1px solid var(--line); color:var(--ink);
+    padding:4px 9px; min-width:0; gap:0;
+  }
+  .stat-chip.sm b{font-size:11.5px;}
+  .stat-chip.sm span{font-size:8px; color:var(--ink-soft);}
+  .stat-chip.sm.ok{background:rgba(70,130,100,0.14); border-color:#a9c6b8; color:var(--pine-deep);}
+  .stat-chip.sm.warn{background:rgba(193,98,43,0.14); border-color:#e0b28c; color:var(--rust);}
 
   .switcher{
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
@@ -191,6 +199,12 @@
 
   table{width:100%; border-collapse:collapse;}
   .wide-col{width:26%; min-width:170px;}
+  /* Members table specifically: names don't need as much room as Item/Category
+     text elsewhere, and mobile numbers were getting clipped without a
+     guaranteed minimum — this fixes both in one pass. */
+  .name-col{width:18%; min-width:110px;}
+  .mobile-col{width:auto; min-width:112px;}
+  .mobile-col input{min-width:100px;}
   .check-col{width:34px; text-align:center; padding-left:4px; padding-right:4px;}
   .check-col input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
   tr.purchased-row .item-name{text-decoration:line-through; opacity:0.55;}
@@ -278,6 +292,10 @@
     font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:.04em; text-transform:uppercase;
     color:var(--ink-soft);
   }
+  .loading-retry{
+    max-width:280px; display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:4px;
+  }
+  .loading-retry .section-note{ text-align:center; margin:0; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
 
   .day-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
@@ -382,9 +400,11 @@
   .modal h2{margin-bottom:14px;}
   .field{margin-bottom:14px;}
   .field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:5px; font-family:'Oswald',sans-serif;}
-  .field input[type=text], .field select{
+  .field input[type=text], .field input[type=date], .field input[type=number], .field select{
     width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:#fff;
   }
+  .field-row{display:flex; gap:12px;}
+  .field-row .field{flex:1; margin-bottom:14px;}
   .type-pick{display:flex; gap:8px;}
   .type-pick button{
     flex:1; padding:14px 8px; border:1.5px solid var(--line); background:#fff; border-radius:8px; cursor:pointer;
@@ -399,6 +419,12 @@
 
   @media (max-width:640px), (max-height:520px) and (orientation:landscape){
     html, body{ overflow-x:hidden; } /* hard safety net against any element pushing the page wider than the screen */
+
+    .plans-header-row{flex-wrap:wrap;}
+    .plans-title{font-size:19px;}
+    .plan-card{flex-direction:column;}
+    .plan-card-thumb{width:100%; height:120px;}
+    .field-row{flex-direction:column; gap:0;}
 
     .tag{
       padding:16px 16px 16px 34px;
@@ -482,6 +508,58 @@
     }
     .tab-swipe-dots span.active{ background:var(--pine); }
   }
+
+  /* ---------- My Plans / Account / trip-header navigation ---------- */
+  .back-to-plans-row{margin-bottom:8px;}
+  .back-to-plans-row .loc-add{color:#F4EFE0; opacity:0.85; font-size:12px;}
+  .back-to-plans-row .loc-add:hover{opacity:1; text-decoration:underline;}
+  .header-date-input{
+    background:transparent; border:1px solid rgba(244,239,224,0.4); border-radius:4px;
+    color:#F4EFE0; font-size:12px; padding:3px 6px; font-family:'IBM Plex Mono',monospace;
+  }
+  .header-date-input::-webkit-calendar-picker-indicator{filter:invert(1); opacity:0.7;}
+
+  .plans-header-row{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:6px;}
+  .plans-title{color:#F4EFE0; font-size:24px;}
+  .plans-header-actions{display:flex; align-items:center; gap:8px; position:relative;}
+  .btn.plans-header-btn{background:transparent; color:#F4EFE0; border-color:rgba(244,239,224,0.5);}
+  .btn.plans-header-btn:hover{background:rgba(244,239,224,0.15);}
+  .menu-wrap{position:relative;}
+  .dropdown-menu{
+    position:absolute; top:calc(100% + 6px); right:0; background:#fff; border:1px solid var(--line);
+    border-radius:8px; box-shadow:var(--shadow); min-width:170px; z-index:20; overflow:hidden;
+  }
+  .dropdown-menu button{
+    display:block; width:100%; text-align:left; padding:10px 14px; background:none; border:none;
+    cursor:pointer; font-size:13px; color:var(--ink); font-family:'Work Sans',sans-serif;
+  }
+  .dropdown-menu button:hover{background:var(--paper-dark);}
+  .dropdown-menu button + button{border-top:1px solid var(--line-soft);}
+
+  .plans-list{display:flex; flex-direction:column; gap:14px; padding:18px 0 60px;}
+  .plan-card{
+    display:flex; gap:14px; background:#F7F2E6; border:1px solid var(--line); border-radius:10px;
+    padding:14px; box-shadow:var(--shadow); cursor:pointer; transition:box-shadow .15s;
+  }
+  .plan-card:hover{box-shadow:0 4px 14px rgba(0,0,0,0.1);}
+  .plan-card-thumb{
+    flex:none; width:68px; height:68px; border-radius:8px; overflow:hidden; background:var(--pine-tint);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .plan-card-thumb img{width:100%; height:100%; object-fit:cover;}
+  .plan-card-thumb .glyph{font-size:28px;}
+  .plan-card-body{flex:1; min-width:0;}
+  .plan-card-title-row{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
+  .plan-card-title{font-family:'Oswald',sans-serif; font-weight:600; font-size:17px; color:var(--pine-deep);}
+  .plan-card-actions{display:flex; gap:4px; flex:none;}
+  .plan-card-icon-btn{
+    background:none; border:1px solid var(--line); border-radius:4px; padding:3px 7px; cursor:pointer; font-size:12px;
+  }
+  .plan-card-icon-btn:hover{background:var(--paper-dark);}
+  .plan-card-sub{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-top:2px;}
+  .plan-card-dates{font-size:12px; color:var(--ink); margin-top:6px;}
+  .plan-card-nodate{font-style:italic; color:var(--ink-soft);}
+  .plan-card-stats{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -2910,43 +2988,51 @@ function moneyField(cls, value, extraAttrs){
   const v = (Math.round((Number(value)||0) * 100) / 100).toFixed(2);
   const attrs = extraAttrs || '';
   const stepAttr = /\bstep=/.test(attrs) ? '' : 'step="0.01"';
-  return `<span class="money-input-wrap"><span class="currency-prefix">$</span><input type="number" class="${cls}" value="${v}" ${stepAttr} ${attrs}></span>`;
+  // Width is sized to THIS value's own character count (ch units), not a
+  // generic fixed width — a fixed width wider than the content leaves empty
+  // space inside the (transparent-background) input, which shows through as
+  // a false gap between the $ and the number. +2.5ch covers the spin buttons.
+  const w = (v.length + 2.5).toFixed(1);
+  return `<span class="money-input-wrap"><span class="currency-prefix">$</span><input type="number" class="${cls}" value="${v}" style="width:${w}ch" ${stepAttr} ${attrs}></span>`;
 }
 
 // Bootstrap seed for the very first time this app connects to a fresh Sheet —
 // after that, the directory lives in shared storage and is managed entirely
 // through the "Manage Access" screen, not by editing this file.
+// NOTE: only Developer is a global level now. Admin is per-trip — whoever
+// creates a trip becomes ITS admin, and can promote others within it.
 const DEFAULT_USER_DIRECTORY = [
   {name:'Vikash Deo', level:'developer'},
-  {name:'Gavin Ponusamy', level:'admin'},
-  {name:'Neville Reddy', level:'admin'},
 ];
 const ACCESS_LEVELS = {
   developer: {label:'Developer', rank:2},
-  admin:     {label:'Admin', rank:1},
+  admin:     {label:'Trip Admin', rank:1}, // per-trip only — never a global directory level going forward
   member:    {label:'Member', rank:0},
 };
-const TAB_ORDER = ['overview','people','costs','meals','itinerary','shopping'];
+const TAB_ORDER = ['overview','itinerary','shopping','meals','costs','people'];
 
 /* ============================= App state ============================= */
 const state = {
   tripsIndex: [],   // [{id,name,type,createdAt}]
-  trip: null,       // current full trip object
+  plansCache: {},   // id -> full trip object, loaded for ALL trips so My Plans can show Budget/Actual/Surplus per card
+  trip: null,       // the trip currently open (a reference into plansCache), or null when on My Plans / Account
+  screen: 'plans',  // 'plans' | 'trip' | 'account'
   tab: 'overview',
   shoppingView: 'category',
   showNewTripModal: false,
   showImportModal: false,
   showManageAccessModal: false,
   showInviteModal: false,
-  showSwitchModal: false,
   loaded: false,
   identity: null,     // {name, phone}
-  userDirectory: [],  // [{name, level: 'developer'|'admin'|'member'}] — shared across ALL trips
+  userDirectory: [],  // [{name, level: 'developer'|'member'}] — GLOBAL, shared across all trips. Admin is not stored here — see each trip's people[].isTripAdmin.
+  legacyGlobalAdmins: [], // lowercase names that WERE globally 'admin' before this model existed — used once to grandfather them into admin on trips they're already part of
 };
 
-// ADMIN: can edit trip content (Admin or Developer). DEVELOPER: can additionally
-// manage who has access at all (add people, promote/demote levels). Both are
-// recomputed from state.userDirectory + state.identity, never hardcoded.
+// ADMIN: can edit the CURRENTLY OPEN trip specifically — true for the global
+// Developer, or for anyone flagged isTripAdmin on THIS trip's People list.
+// Recomputed every time a different trip is opened (see openTrip()), NOT a
+// fixed global flag like it used to be. DEVELOPER is still global.
 let ADMIN = false;
 let DEVELOPER = false;
 let ACCESS_LEVEL = 'member';
@@ -2957,17 +3043,35 @@ function accessLevelForName(name){
   const entry = state.userDirectory.find(u=>String(u.name||'').trim().toLowerCase()===key);
   return entry ? entry.level : 'member';
 }
-function computeAdmin(){
+function computeGlobalLevel(){
   ACCESS_LEVEL = state.identity ? accessLevelForName(state.identity.name) : 'member';
   DEVELOPER = ACCESS_LEVEL === 'developer';
-  ADMIN = ACCESS_LEVEL === 'developer' || ACCESS_LEVEL === 'admin';
+  ADMIN = DEVELOPER; // no trip open yet — this gets recomputed per-trip in openTrip()
+}
+// Can the current identity edit this specific trip? Developer always can;
+// otherwise only someone flagged isTripAdmin in THAT trip's People list.
+function canEditTrip(trip){
+  if(DEVELOPER) return true;
+  if(!trip || !state.identity) return false;
+  const myName = String(state.identity.name||'').trim().toLowerCase();
+  return trip.people.some(p=>String(p.name||'').trim().toLowerCase()===myName && p.isTripAdmin);
+}
+// Recomputes the ADMIN flag for whichever trip is now open — call this any
+// time state.trip changes. Everywhere else in the app, the existing ${ADMIN?...}
+// checks keep working unchanged, now driven by per-trip status instead of a
+// fixed global one.
+function computeAdminForOpenTrip(){
+  ADMIN = canEditTrip(state.trip);
   return ADMIN;
 }
-// Kept for the Members table's per-person Access badge — now reflects the
-// real directory (and Developer) instead of a hardcoded admin-only check.
-function isAdminName(name){
-  const lvl = accessLevelForName(name);
-  return lvl === 'admin' || lvl === 'developer';
+// Per-trip Access badge in the Members table: Developer (global) takes
+// precedence, then this trip's own admin flag, else Member.
+function accessLevelInTrip(trip, name){
+  if(accessLevelForName(name)==='developer') return 'developer';
+  const key = String(name||'').trim().toLowerCase();
+  const person = trip.people.find(p=>String(p.name||'').trim().toLowerCase()===key);
+  if(person && person.isTripAdmin) return 'admin';
+  return 'member';
 }
 
 async function loadUserDirectory(){
@@ -2979,6 +3083,15 @@ async function loadUserDirectory(){
     state.userDirectory = DEFAULT_USER_DIRECTORY.map(u=>({...u}));
     await storeSet('user-directory', state.userDirectory, true);
   }
+  // Remember who was globally 'admin' under the OLD model, before we migrate
+  // those entries away — existing trips use this once to grandfather them in
+  // as THAT trip's admin, so nobody already using the app loses edit access.
+  state.legacyGlobalAdmins = state.userDirectory
+    .filter(u=>u.level==='admin')
+    .map(u=>String(u.name||'').trim().toLowerCase());
+  let migrated = false;
+  state.userDirectory.forEach(u=>{ if(u.level==='admin'){ u.level='member'; migrated=true; } });
+  if(migrated) saveUserDirectory();
 }
 function countDevelopers(){
   return state.userDirectory.filter(u=>u.level==='developer').length;
@@ -3037,8 +3150,22 @@ function ensureTripShape(t){
   if(t.startDate === undefined) t.startDate = '';
   if(!t.catchLog) t.catchLog = {};
   if(t.catchLogEnabled === undefined) t.catchLogEnabled = false;
-  if(Array.isArray(t.shopping)) t.shopping.forEach(i=>{ if(i.purchased===undefined) i.purchased=false; });
+  // Guard every array field — a trip that's ever been hand-edited, partially
+  // imported, or hit a save error in the past could have one of these missing
+  // or containing a stray null/undefined entry, and any of that used to crash
+  // the WHOLE My Plans list (every trip's card math runs on load), not just
+  // that one trip.
+  if(!Array.isArray(t.costs)) t.costs = [];
+  if(!Array.isArray(t.roles)) t.roles = [];
+  if(!Array.isArray(t.people)) t.people = [];
+  t.people = t.people.filter(p=>p);
+  if(!Array.isArray(t.days)) t.days = [];
+  t.days = t.days.filter(d=>d);
+  if(!Array.isArray(t.shopping)) t.shopping = [];
+  t.shopping = t.shopping.filter(i=>i);
+  t.shopping.forEach(i=>{ if(i.purchased===undefined) i.purchased=false; });
   if(!Array.isArray(t.activities)) t.activities = [];
+  t.activities = t.activities.filter(a=>a);
   t.activities.forEach((a,i)=>{
     if(a.type===undefined) a.type = 'activity';
     if(a.endTime===undefined) a.endTime = '';
@@ -3046,6 +3173,15 @@ function ensureTripShape(t){
     if(a.order===undefined) a.order = i;
   });
   if(!t.balanceForward) t.balanceForward = {label:'Balance FW', amount:0};
+  t.people.forEach(p=>{
+    if(p.isTripAdmin === undefined){
+      // Grandfather in anyone who was a global admin under the old model —
+      // per-trip admin replaces it, but nobody already using the app should
+      // silently lose edit access to a trip they were already editing.
+      const key = String(p.name||'').trim().toLowerCase();
+      p.isTripAdmin = (state.legacyGlobalAdmins||[]).includes(key);
+    }
+  });
   return t;
 }
 
@@ -3211,7 +3347,7 @@ async function saveIdentity(name, phone){
   state.identity = {name: name.trim(), phone: (phone||'').trim()};
   await storeSet('my-identity', state.identity, false);
   await loadUserDirectory();
-  computeAdmin();
+  computeGlobalLevel();
 }
 async function clearIdentity(){
   state.identity = null;
@@ -3299,67 +3435,104 @@ async function init(){
     return;
   }
   await loadUserDirectory();
-  computeAdmin();
+  computeGlobalLevel();
   await loadTripsAndTrip();
 }
 
 async function loadTripsAndTrip(){
-  showLoading('Loading your trip…');
-  const lastId = await storeGet('last-trip-id', false); // local, instant
+  showLoading('Loading your plans…', loadTripsAndTrip);
+  const idx = await storeGet('trips-index', true);
+  state.tripsIndex = idx || [];
+  // Fetch every trip's full data up front — the My Plans list needs each
+  // one's Budget/Actual/Surplus, and this means opening a trip afterwards
+  // is instant (already cached) instead of a second network round-trip.
+  // Throttled to 4 at a time rather than all-at-once — see mapWithConcurrency.
+  const fullTrips = await mapWithConcurrency(state.tripsIndex, 4, ix => storeGet('trip:'+ix.id, true));
+  state.plansCache = {};
+  state.tripsIndex.forEach((ix, i) => {
+    if(fullTrips[i]) state.plansCache[ix.id] = ensureTripShape(fullTrips[i]);
+  });
 
-  let idx, tripToLoad = null;
-  if(lastId){
-    // We already know which trip we probably want — fetch the index and
-    // that trip in parallel instead of waiting on the index first.
-    const [idxResult, tripResult] = await Promise.all([
-      storeGet('trips-index', true),
-      storeGet('trip:'+lastId, true),
-    ]);
-    idx = idxResult;
-    state.tripsIndex = idx || [];
-    if(state.tripsIndex.find(x=>x.id===lastId)) tripToLoad = tripResult;
-  } else {
-    idx = await storeGet('trips-index', true);
-    state.tripsIndex = idx || [];
+  // Members only see trips they're actually part of (their name appears in
+  // that trip's People list) — Admins/Developers see everything, since they
+  // manage the whole ledger. Filtering here (not just at display time) means
+  // a Member's app never even holds data for trips they're not part of.
+  if(!ADMIN){
+    const myName = String(state.identity.name||'').trim().toLowerCase();
+    state.tripsIndex = state.tripsIndex.filter(ix=>{
+      const t = state.plansCache[ix.id];
+      return t && t.people.some(p=>String(p.name||'').trim().toLowerCase()===myName);
+    });
+    const allowedIds = new Set(state.tripsIndex.map(ix=>ix.id));
+    Object.keys(state.plansCache).forEach(id=>{ if(!allowedIds.has(id)) delete state.plansCache[id]; });
   }
 
-  if(!tripToLoad && state.tripsIndex.length){
-    tripToLoad = await storeGet('trip:'+state.tripsIndex[0].id, true);
-  }
-  if(!tripToLoad){
-    if(ADMIN) state.showNewTripModal = true;
-  } else {
-    state.trip = ensureTripShape(tripToLoad);
-  }
+  state.screen = 'plans';
+  state.trip = null;
   state.loaded = true;
   render();
 }
 
-function showLoading(msg){
+function openTrip(id){
+  const t = state.plansCache[id];
+  if(!t) return;
+  state.trip = t;
+  computeAdminForOpenTrip(); // ADMIN now reflects whether I can edit THIS trip specifically
+  state.screen = 'trip';
+  state.tab = 'overview';
+  storeSet('last-trip-id', id, false); // local convenience only, not relied on for navigation anymore
+  render();
+}
+function backToPlans(){
+  state.trip = null;
+  ADMIN = DEVELOPER; // no specific trip is open — outside a trip, only Developer counts as "admin"
+  state.screen = 'plans';
+  render();
+}
+
+let loadingRetryTimer = null;
+function showLoading(msg, onRetry){
+  clearTimeout(loadingRetryTimer);
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="loading-screen">
       <div class="loading-spinner"></div>
       <div class="loading-msg">${escapeHtml(msg||'Loading…')}</div>
+      <div class="loading-retry" id="loadingRetry" hidden>
+        <div class="section-note">This is taking longer than usual — your connection or the backend may be slow right now.</div>
+        <button class="btn ghost sm" id="btnLoadingRetry">↻ Try again</button>
+      </div>
     </div>
   `;
+  const retryBtn = document.getElementById('btnLoadingRetry');
+  if(retryBtn && onRetry) retryBtn.addEventListener('click', onRetry);
+  // Don't cut the request off early — Apps Script cold-starts can
+  // legitimately take a while — but don't leave someone staring at a bare
+  // spinner wondering if it's frozen, either. Surface a way out after 6s.
+  if(onRetry){
+    loadingRetryTimer = setTimeout(()=>{
+      const el = document.getElementById('loadingRetry');
+      if(el) el.hidden = false;
+    }, 6000);
+  }
 }
 
-async function selectTrip(id){
-  if(actionInProgress) return;
-  actionInProgress = true;
-  try{
-    showLoading('Switching trip…');
-    const t = await storeGet('trip:'+id, true);
-    if(t){
-      state.trip = ensureTripShape(t);
-      state.tab = 'overview';
-      storeSet('last-trip-id', id, false);
+// Runs async work over `items` with at most `limit` requests in flight at
+// once, instead of firing every trip's fetch simultaneously — Google Apps
+// Script has real concurrency limits, and blasting it with N-at-once
+// requests (one per trip) is a likely cause of stalls that then sit behind
+// the hard timeout looking exactly like a freeze.
+async function mapWithConcurrency(items, limit, fn){
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker(){
+    while(next < items.length){
+      const i = next++;
+      results[i] = await fn(items[i], i);
     }
-    render();
-  } finally {
-    actionInProgress = false;
   }
+  await Promise.all(Array.from({length: Math.min(limit, items.length)}, worker));
+  return results;
 }
 
 // Prevents the exact "screen freezes" bug: these buttons live in a modal
@@ -3369,30 +3542,36 @@ async function selectTrip(id){
 // duplicate but makes the real wait even longer (two round-trips instead of one).
 let actionInProgress = false;
 
-async function createTrip(name, type){
-  if(!ADMIN || actionInProgress) return;
+// Anyone signed in can create a trip — they automatically become ITS admin
+// and can invite others / promote them within it. There's no global "Admin"
+// gate here anymore, only Developer (which can always create too, obviously).
+async function createTrip(name, type, startDate, numDays){
+  if(!state.identity || actionInProgress) return;
   actionInProgress = true;
   try{
     showLoading('Creating trip…');
     const t = newTrip(name, type);
+    t.startDate = startDate || '';
+    const n = Math.max(1, Number(numDays)||1);
+    t.days = Array.from({length:n}, (_,i)=>({id:uid(), label:'Day '+(i+1), breakfast:'', lunch:'', dinner:''}));
+    // The creator is automatically added as a member AND this trip's admin.
+    t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
     state.tripsIndex.push({id:t.id, name:t.name, type:t.type, createdAt:t.createdAt});
+    state.plansCache[t.id] = t;
     await Promise.all([
       storeSet('trips-index', state.tripsIndex, true),
       storeSet('trip:'+t.id, t, true),
     ]);
-    storeSet('last-trip-id', t.id, false); // local, instant — no need to await
-    state.trip = t;
-    state.tab = 'overview';
     state.showNewTripModal = false;
-    render();
+    openTrip(t.id);
   } finally {
     actionInProgress = false;
   }
 }
 
-async function duplicateTrip(){
-  if(!ADMIN || !state.trip || actionInProgress) return;
-  const src = state.trip;
+async function duplicateTripById(id){
+  const src = state.plansCache[id];
+  if(!src || !canEditTrip(src) || actionInProgress) return;
   const name = prompt('Name for the new trip:', src.name + ' (Copy)');
   if(!name || !name.trim()) return;
   actionInProgress = true;
@@ -3413,6 +3592,7 @@ async function duplicateTrip(){
       dayIdMap[d.id] = newId;
       return {...d, id:newId};
     });
+    const myName = String(state.identity.name||'').trim().toLowerCase();
 
     const newTripObj = {
       id: uid(),
@@ -3424,7 +3604,9 @@ async function duplicateTrip(){
       startDate: src.startDate,
       costs: src.costs.map(c=>({...c, id:uid(), actual:0})),          // budgets copied, actual spend reset
       roles: newRoles,
-      people: src.people.map(p=>({...p, id:uid(), roleId: roleIdMap[p.roleId]||'', paid:0})), // who's coming copied, payments reset
+      // who's coming is copied, payments reset — and admin resets too: only
+      // whoever duplicated it is admin on the copy, matching "creator becomes admin".
+      people: src.people.map(p=>({...p, id:uid(), roleId: roleIdMap[p.roleId]||'', paid:0, isTripAdmin: String(p.name||'').trim().toLowerCase()===myName})),
       days: newDays,                                                   // meal plan copied as-is
       shopping: src.shopping.map(s=>({...s, id:uid(), unitActual:0, purchased:false})), // list copied, shopping progress reset
       catchLog: {},                                                    // catch counts are per-trip, start fresh
@@ -3434,32 +3616,26 @@ async function duplicateTrip(){
     };
 
     state.tripsIndex.push({id:newTripObj.id, name:newTripObj.name, type:newTripObj.type, createdAt:newTripObj.createdAt});
+    state.plansCache[newTripObj.id] = newTripObj;
     await Promise.all([
       storeSet('trips-index', state.tripsIndex, true),
       storeSet('trip:'+newTripObj.id, newTripObj, true),
     ]);
-    storeSet('last-trip-id', newTripObj.id, false);
-    state.trip = newTripObj;
-    state.tab = 'overview';
-    render();
+    render(); // stay on My Plans — show the new card alongside the original
   } finally {
     actionInProgress = false;
   }
 }
 
-async function deleteCurrentTrip(){
-  if(!ADMIN || !state.trip) return;
-  if(!confirm('Delete "'+state.trip.name+'"? This cannot be undone.')) return;
-  const id = state.trip.id;
-  state.tripsIndex = state.tripsIndex.filter(t=>t.id!==id);
+async function deleteTripById(id){
+  const t = state.plansCache[id];
+  if(!t || !canEditTrip(t)) return;
+  if(!confirm('Delete "'+t.name+'"? This cannot be undone.')) return;
+  state.tripsIndex = state.tripsIndex.filter(x=>x.id!==id);
+  delete state.plansCache[id];
   await storeSet('trips-index', state.tripsIndex, true);
-  if(state.tripsIndex.length){
-    await selectTrip(state.tripsIndex[0].id);
-  } else {
-    state.trip = null;
-    state.showNewTripModal = true;
-    render();
-  }
+  if(state.trip && state.trip.id===id){ state.trip = null; ADMIN = DEVELOPER; state.screen = 'plans'; }
+  render();
 }
 
 /* ============================= Rendering ============================= */
@@ -3476,18 +3652,47 @@ function render(){
     bindIdentityGate();
     return;
   }
-  if(!state.trip){
-    if(ADMIN){
-      app.innerHTML = renderIdentityBadge() + renderNewTripModal(true);
-      bindNewTripModal();
-    } else {
-      app.innerHTML = renderIdentityBadge() + renderNoTripsForViewer();
-      bindIdentityBadge();
-      const rb = document.getElementById('refreshTrips');
-      if(rb) rb.addEventListener('click', loadTripsAndTrip);
-    }
-    return;
+
+  if(state.screen === 'account'){
+    renderAccountScreen();
+  } else if(state.screen === 'trip' && state.trip){
+    renderTripScreen();
+  } else {
+    renderPlansScreen();
   }
+  mountModals();
+}
+
+function mountModals(){
+  const t = state.trip;
+  if(state.showNewTripModal && state.identity){
+    const wrap = document.createElement('div');
+    wrap.innerHTML = renderNewTripModal();
+    document.body.appendChild(wrap.firstElementChild);
+    bindNewTripModal();
+  }
+  if(state.showImportModal && t && canEditTrip(t)){
+    const wrap2 = document.createElement('div');
+    wrap2.innerHTML = renderImportModal();
+    document.body.appendChild(wrap2.firstElementChild);
+    bindImportModal(t);
+  }
+  if(state.showManageAccessModal && DEVELOPER){
+    const wrap3 = document.createElement('div');
+    wrap3.innerHTML = renderManageAccessModal();
+    document.body.appendChild(wrap3.firstElementChild);
+    bindManageAccessModal();
+  }
+  if(state.showInviteModal && state.identity){
+    const wrap4 = document.createElement('div');
+    wrap4.innerHTML = renderInviteModal();
+    document.body.appendChild(wrap4.firstElementChild);
+    bindInviteModal();
+  }
+}
+
+function renderTripScreen(){
+  const app = document.getElementById('app');
   const t = state.trip;
   const g = grandTotals(t);
   const collected = collectedTotal(t);
@@ -3497,6 +3702,9 @@ function render(){
   app.innerHTML = `
     <div class="tag">
       ${renderIdentityBadge(true)}
+      <div class="back-to-plans-row">
+        <span class="loc-add" id="btnBackToPlans">← My Plans</span>
+      </div>
       <div class="tag-left">
         <div class="cover-thumb" id="coverThumb" title="${ADMIN?'Click to add/change photo':''}" style="${ADMIN?'cursor:pointer':''}">
           ${t.photo ? `<img src="${t.photo}" alt="Trip photo">` : `<span class="glyph">${meta.glyph}</span>`}
@@ -3512,9 +3720,9 @@ function render(){
             ${ADMIN && t.location && t.location.name ? `<span class="loc-edit" id="btnSetLocation">edit</span>` : ''}
           </div>
           <div class="loc-line">
-            ${t.startDate
-              ? `📅 ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}`
-              : (ADMIN ? `<span class="loc-add" id="btnGoSetDates">📅 Set trip dates</span>` : '')}
+            ${ADMIN
+              ? `📅 <input type="date" id="tripStartDateHeader" value="${escapeHtml(t.startDate||'')}" class="header-date-input">${t.startDate ? `<span class="trip-date-range">→ ${formatDayDate(tripEndDate(t))}</span>` : ''}`
+              : (t.startDate ? `📅 ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}` : '')}
           </div>
         </div>
       </div>
@@ -3523,38 +3731,24 @@ function render(){
         <div class="stat-chip"><b>${money(g.actual)}</b><span>Actual</span></div>
         <div class="stat-chip ${surplus>=0?'ok':'warn'}"><b>${surplus>=0?'+':''}${money(surplus)}</b><span>${surplus>=0?'Surplus':'Shortfall'}</span></div>
       </div>
-      <div class="switcher">
-        <select class="trip-select" id="tripSwitch">
-          ${state.tripsIndex.map(ti=>`<option value="${ti.id}" ${ti.id===t.id?'selected':''}>${(TYPE_META[ti.type]||TYPE_META.other).glyph} ${escapeHtml(ti.name)}</option>`).join('')}
-        </select>
-        ${ADMIN ? `<button class="btn ghost sm" id="btnNewTrip" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">+ New</button>` : ''}
-        ${ADMIN ? `<button class="btn ghost sm" id="btnDuplicateTrip" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Duplicate this trip">⧉ Duplicate</button>` : ''}
-        ${ADMIN ? `<button class="btn ghost sm" id="btnImport" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">⬇ Import</button>` : ''}
-        ${ADMIN && state.tripsIndex.length>1 ? `<button class="btn ghost sm" id="btnDeleteTrip" style="background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Delete this trip">🗑</button>` : ''}
-      </div>
       ${ADMIN ? `<input type="file" accept="image/*" id="photoInput" style="display:none">` : ''}
     </div>
 
     <div class="tabs">
       ${tabBtn('overview','🏠 Home')}
-      ${tabBtn('people','👥 People')}
-      ${tabBtn('costs','💰 Cost')}
-      ${tabBtn('meals','🍽️ Meal Planner')}
       ${tabBtn('itinerary','🗓️ Itinerary')}
       ${tabBtn('shopping','🛒 Shopping')}
+      ${tabBtn('meals','🍽️ Meal Planner')}
+      ${tabBtn('costs','💰 Cost')}
+      ${tabBtn('people','👥 People')}
     </div>
     <div class="panel" id="panel"></div>
     <div class="tab-swipe-dots">${TAB_ORDER.map(k=>`<span class="${k===state.tab?'active':''}"></span>`).join('')}</div>
-    <div class="footer-note">${ADMIN ? 'Everything here is saved automatically as you type — for your next fishing or camping trip, just hit "+ New". Swipe left/right to switch tabs.' : 'You\u2019re viewing this trip as a read-only member. Only admins can make changes.'}</div>
+    <div class="footer-note">${ADMIN ? 'Everything here is saved automatically as you type. Swipe left/right to switch tabs.' : 'You\u2019re viewing this trip as a read-only member. Only admins can make changes.'}</div>
   `;
 
-  document.getElementById('tripSwitch').addEventListener('change', e=>selectTrip(e.target.value));
+  document.getElementById('btnBackToPlans').addEventListener('click', backToPlans);
   if(ADMIN){
-    document.getElementById('btnNewTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
-    document.getElementById('btnDuplicateTrip').addEventListener('click', duplicateTrip);
-    document.getElementById('btnImport').addEventListener('click', ()=>{ state.showImportModal=true; render(); });
-    const delBtn = document.getElementById('btnDeleteTrip');
-    if(delBtn) delBtn.addEventListener('click', deleteCurrentTrip);
     const nameEl = document.getElementById('tripNameDisplay');
     nameEl.addEventListener('click', ()=>{
       const val = prompt('Trip name', t.name);
@@ -3566,37 +3760,158 @@ function render(){
     photoInput.addEventListener('change', (e)=>handlePhotoUpload(e, t));
     const locBtn = document.getElementById('btnSetLocation');
     if(locBtn) locBtn.addEventListener('click', ()=>editLocation(t));
-    const datesBtn = document.getElementById('btnGoSetDates');
-    if(datesBtn) datesBtn.addEventListener('click', ()=>{ state.tab='meals'; render(); });
+    const dateInput = document.getElementById('tripStartDateHeader');
+    if(dateInput) dateInput.addEventListener('change', e=>{ t.startDate = e.target.value; scheduleSave(); render(); });
   }
   bindIdentityBadge();
-
   renderPanel();
+}
 
-  if(state.showNewTripModal && ADMIN){
-    const wrap = document.createElement('div');
-    wrap.innerHTML = renderNewTripModal(false);
-    document.body.appendChild(wrap.firstElementChild);
-    bindNewTripModal();
+/* ============================= My Plans (landing page) ============================= */
+function renderPlansScreen(){
+  const app = document.getElementById('app');
+  const plans = state.tripsIndex
+    .map(ix => state.plansCache[ix.id])
+    .filter(Boolean)
+    .sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+
+  const cards = plans.map(t=>{
+    const meta = TYPE_META[t.type] || TYPE_META.other;
+    const g = grandTotals(t);
+    const collected = collectedTotal(t);
+    const surplus = collected - g.actual;
+    const editable = canEditTrip(t); // per-card — different trips can have different admins for the same viewer
+    const dateLine = t.startDate
+      ? `📅 ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}`
+      : `<span class="plan-card-nodate">Dates not set yet</span>`;
+    return `
+      <div class="plan-card" data-plan="${t.id}">
+        <div class="plan-card-thumb">
+          ${t.photo ? `<img src="${t.photo}" alt="">` : `<span class="glyph">${meta.glyph}</span>`}
+        </div>
+        <div class="plan-card-body">
+          <div class="plan-card-title-row">
+            <div class="plan-card-title">${escapeHtml(t.name)}</div>
+            ${editable ? `
+              <div class="plan-card-actions">
+                <button class="plan-card-icon-btn plan-duplicate-btn" title="Duplicate this trip">⧉</button>
+                <button class="plan-card-icon-btn plan-delete-btn" title="Delete this trip">🗑</button>
+              </div>
+            ` : ''}
+          </div>
+          <div class="plan-card-sub">${meta.label} &middot; ${t.people.length} member${t.people.length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
+          <div class="plan-card-dates">${dateLine}</div>
+          <div class="plan-card-stats">
+            <div class="stat-chip sm"><b>${money(g.budget)}</b><span>Budget</span></div>
+            <div class="stat-chip sm"><b>${money(g.actual)}</b><span>Actual</span></div>
+            <div class="stat-chip sm ${surplus>=0?'ok':'warn'}"><b>${surplus>=0?'+':''}${money(surplus)}</b><span>${surplus>=0?'Surplus':'Shortfall'}</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  app.innerHTML = `
+    <div class="tag">
+      ${renderIdentityBadge(true)}
+      <div class="plans-header-row">
+        <h1 class="plans-title">My Plans</h1>
+        <div class="plans-header-actions">
+          <button class="btn ghost sm plans-header-btn" id="btnAccountNav" title="Account">👤 Account</button>
+          <div class="menu-wrap">
+            <button class="btn ghost sm plans-header-btn" id="btnPlansMenu" title="More">⋯</button>
+            <div class="dropdown-menu" id="plansMenuDropdown" hidden>
+              <button id="menuCreateTrip">+ Create a Trip</button>
+              <button id="menuImportTrip">⬇ Import a Trip</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="plans-list">
+      ${cards || `
+        <div class="empty" style="margin-top:24px">
+          No trips yet.
+          <div style="margin-top:14px"><button class="btn" id="btnCreateFirstTrip">+ Create your first trip</button></div>
+        </div>
+      `}
+    </div>
+  `;
+
+  bindIdentityBadge();
+  document.getElementById('btnAccountNav').addEventListener('click', ()=>{ state.screen='account'; render(); });
+
+  const menuBtn = document.getElementById('btnPlansMenu');
+  if(menuBtn){
+    const dropdown = document.getElementById('plansMenuDropdown');
+    menuBtn.addEventListener('click', (e)=>{ e.stopPropagation(); dropdown.hidden = !dropdown.hidden; });
+    document.addEventListener('click', ()=>{ dropdown.hidden = true; }, {once:true});
+    document.getElementById('menuCreateTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+    document.getElementById('menuImportTrip').addEventListener('click', ()=>{
+      // Import needs a target trip — create a blank one first, then open the importer.
+      createTrip('New Trip', 'other', '', 1).then(()=>{ state.showImportModal = true; render(); });
+    });
   }
-  if(state.showImportModal && ADMIN){
-    const wrap2 = document.createElement('div');
-    wrap2.innerHTML = renderImportModal();
-    document.body.appendChild(wrap2.firstElementChild);
-    bindImportModal(t);
-  }
-  if(state.showManageAccessModal && DEVELOPER){
-    const wrap3 = document.createElement('div');
-    wrap3.innerHTML = renderManageAccessModal();
-    document.body.appendChild(wrap3.firstElementChild);
-    bindManageAccessModal();
-  }
-  if(state.showInviteModal && ADMIN){
-    const wrap4 = document.createElement('div');
-    wrap4.innerHTML = renderInviteModal();
-    document.body.appendChild(wrap4.firstElementChild);
-    bindInviteModal();
-  }
+  const firstBtn = document.getElementById('btnCreateFirstTrip');
+  if(firstBtn) firstBtn.addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+
+  document.querySelectorAll('.plan-card').forEach(card=>{
+    const id = card.dataset.plan;
+    card.addEventListener('click', (e)=>{
+      if(e.target.closest('.plan-card-actions')) return; // icon clicks handled separately below
+      openTrip(id);
+    });
+    const dup = card.querySelector('.plan-duplicate-btn');
+    if(dup) dup.addEventListener('click', (e)=>{ e.stopPropagation(); duplicateTripById(id); });
+    const del = card.querySelector('.plan-delete-btn');
+    if(del) del.addEventListener('click', (e)=>{ e.stopPropagation(); deleteTripById(id); });
+  });
+}
+
+/* ============================= Account ============================= */
+function renderAccountScreen(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="tag">
+      ${renderIdentityBadge(true)}
+      <div class="back-to-plans-row">
+        <span class="loc-add" id="btnBackToPlansFromAccount">← My Plans</span>
+      </div>
+      <h1 class="plans-title">👤 Account</h1>
+    </div>
+    <div class="panel">
+      <div class="panel-section">
+        <div class="section-head"><h2>Invite a member</h2></div>
+        <div class="section-note">Get a QR code or link that connects a new member straight to this ledger.</div>
+        <button class="btn ghost sm" id="btnInviteFromAccount">📱 Invite</button>
+      </div>
+      ${DEVELOPER ? `
+        <div class="panel-section">
+          <div class="section-head"><h2>👑 Manage Access</h2></div>
+          <div class="section-note">Add people and set whether they're a Developer (sees/edits everything) or Member.</div>
+          <button class="btn ghost sm" id="btnManageAccessFromAccount">👑 Manage Access</button>
+        </div>
+      ` : ''}
+      <div class="panel-section">
+        <div class="section-head"><h2>Backend</h2></div>
+        <div class="section-note">This is the Google Sheet this ledger reads and writes to.</div>
+        <button class="btn ghost sm" id="btnBackendSettingsFromAccount">⚙ Change backend URL</button>
+      </div>
+    </div>
+  `;
+  bindIdentityBadge();
+  document.getElementById('btnBackToPlansFromAccount').addEventListener('click', ()=>{ state.screen='plans'; render(); });
+  const inv = document.getElementById('btnInviteFromAccount');
+  if(inv) inv.addEventListener('click', ()=>{ state.showInviteModal = true; render(); });
+  const m = document.getElementById('btnManageAccessFromAccount');
+  if(m) m.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
+  const s = document.getElementById('btnBackendSettingsFromAccount');
+  if(s) s.addEventListener('click', ()=>{
+    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
+      localStorage.removeItem(LS_BACKEND_URL_KEY);
+      render();
+    }
+  });
 }
 
 function renderIdentityBadge(inHeader){
@@ -3607,9 +3922,6 @@ function renderIdentityBadge(inHeader){
       <div class="header-identity">
         <span id="backendChip" class="backend-chip"></span>
         <span>Viewing as <b>${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;">${role}</span></span>
-        ${ADMIN?'<button class="btn ghost sm" id="btnInvite" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Invite a member via QR code or link">📱 Invite</button>':''}
-        ${DEVELOPER?'<button class="btn ghost sm" id="btnManageAccess" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Manage who has access">👑 Access</button>':''}
-        ${ADMIN?'<button class="btn ghost sm" id="btnBackendSettings" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)" title="Change backend URL">⚙</button>':''}
         <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
       </div>
     `;
@@ -3618,9 +3930,6 @@ function renderIdentityBadge(inHeader){
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
       <span>Viewing as <b style="color:var(--pine-deep)">${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)">${role}</span></span>
-      ${ADMIN?'<button class="btn ghost sm" id="btnInvite" style="padding:3px 10px;font-size:11px" title="Invite a member via QR code or link">📱 Invite</button>':''}
-      ${DEVELOPER?'<button class="btn ghost sm" id="btnManageAccess" style="padding:3px 10px;font-size:11px" title="Manage who has access">👑 Access</button>':''}
-      ${ADMIN?'<button class="btn ghost sm" id="btnBackendSettings" style="padding:3px 10px;font-size:11px" title="Change backend URL">⚙</button>':''}
       <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
     </div>
   `;
@@ -3628,28 +3937,7 @@ function renderIdentityBadge(inHeader){
 function bindIdentityBadge(){
   const b = document.getElementById('btnSwitchIdentity');
   if(b) b.addEventListener('click', clearIdentity);
-  const s = document.getElementById('btnBackendSettings');
-  if(s) s.addEventListener('click', ()=>{
-    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
-      localStorage.removeItem(LS_BACKEND_URL_KEY);
-      render();
-    }
-  });
-  const inv = document.getElementById('btnInvite');
-  if(inv) inv.addEventListener('click', ()=>{ state.showInviteModal = true; render(); });
-  const m = document.getElementById('btnManageAccess');
-  if(m) m.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
   renderBackendChip();
-}
-
-function renderNoTripsForViewer(){
-  return `
-    <div class="empty" style="margin-top:20px">
-      No trips have been set up yet.<br>
-      Ask an admin to create one, then check back.
-      <div style="margin-top:14px"><button class="btn ghost sm" id="refreshTrips">Refresh</button></div>
-    </div>
-  `;
 }
 
 function tabBtn(key,label){
@@ -3816,12 +4104,14 @@ function renderPeople(t){
     const paid = Number(p.paid)||0;
     const bal = owed - paid;
     const isMe = state.identity && p.name && p.name.trim().toLowerCase() === state.identity.name.trim().toLowerCase();
-    const personLevel = accessLevelForName(p.name);
+    const isGlobalDev = accessLevelForName(p.name)==='developer';
     const selectedRole = t.roles.find(r=>r.id===p.roleId);
     return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
-      <td class="wide-col" data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
-      <td data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
-      <td data-label="Access"><span class="access-badge ${personLevel}">${ACCESS_LEVELS[personLevel].label}</span></td>
+      <td class="name-col" data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
+      <td class="mobile-col" data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
+      <td data-label="Access">${isGlobalDev
+          ? `<span class="access-badge developer">Developer</span>`
+          : `<span class="access-badge ${p.isTripAdmin?'admin':'member'}"><input type="checkbox" class="person-trip-admin" ${p.isTripAdmin?'checked':''} ${RO} title="Admin for this trip" style="vertical-align:middle;margin-right:4px;">${p.isTripAdmin?'Trip Admin':'Member'}</span>`}</td>
       <td data-label="Role">
         <select class="person-role" ${RO} title="${selectedRole?escapeHtml(selectedRole.label):'Choose a role'}">
           <option value="">—</option>
@@ -3854,10 +4144,10 @@ function renderPeople(t){
       <div class="section-head"><h2>Members</h2>
         ${ADMIN?'<button class="btn ghost sm" id="addPerson">+ Add member</button>':''}
       </div>
-      <div class="section-note">Access is automatic — it's based on whether a member's name matches the admin list, not something you set here.</div>
+      <div class="section-note">Tick "Trip Admin" for anyone who should be able to edit this specific trip — the trip's creator gets it automatically.</div>
       <div class="table-scroll">
       <table>
-        <thead><tr><th class="wide-col">Name</th><th>Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
+        <thead><tr><th class="name-col">Name</th><th class="mobile-col">Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
         <tbody>
           ${peopleRows || `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);font-style:italic;">No members added yet.</td></tr>`}
           <tr class="subtotal">
@@ -4020,12 +4310,7 @@ function renderMeals(t){
       <div class="section-head"><h2>🍽️ Meal Planner</h2>
         ${ADMIN?'<button class="btn ghost sm" id="addDay">+ Add day</button>':''}
       </div>
-      <div class="section-note">Set the trip's start date once — each day below (and the header) will date itself automatically.</div>
-      <div class="trip-start-row">
-        <label for="tripStartDate">Trip start date</label>
-        <input type="date" id="tripStartDate" value="${escapeHtml(t.startDate||'')}" ${RO}>
-        ${t.startDate ? `<span class="trip-date-range">${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}</span>` : ''}
-      </div>
+      <div class="section-note">${t.startDate ? `Dates run ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))} — change the start date from the trip header above.` : (ADMIN ? 'No start date set yet — add one from the trip header above and each day here will date itself automatically.' : "This trip's dates haven't been set yet.")}</div>
       <div class="day-grid">
         ${cards || `<div class="empty">No days added yet — add your first day of the trip.</div>`}
       </div>
@@ -4240,8 +4525,25 @@ function bindPanelEvents(){
   qa('.person-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e); t.people = t.people.filter(p=>p.id!==idv); scheduleSave(); renderPanel();
   }));
+  qa('.person-trip-admin').forEach(el=>el.addEventListener('change', e=>{
+    const person = findPerson(t, rowId(e));
+    if(person.isTripAdmin && !e.target.checked){
+      const remainingTripAdmins = t.people.filter(p=>p.isTripAdmin && p.id!==person.id).length;
+      if(remainingTripAdmins===0 && !DEVELOPER){
+        alert('This trip needs at least one admin — promote someone else first, or ask the Developer to help.');
+        e.target.checked = true;
+        return;
+      }
+    }
+    person.isTripAdmin = e.target.checked;
+    scheduleSave();
+    if(state.identity && person.name.trim().toLowerCase()===state.identity.name.trim().toLowerCase()){
+      computeAdminForOpenTrip(); // I just changed my own access to this trip — reflect it immediately
+    }
+    renderPanel();
+  }));
   id('addPerson') && id('addPerson').addEventListener('click', ()=>{
-    t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0}); scheduleSave(); renderPanel();
+    t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel();
   });
 
   // CATCH LOG
@@ -4274,7 +4576,6 @@ function bindPanelEvents(){
 
   // MEALS
   qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
-  id('tripStartDate') && id('tripStartDate').addEventListener('change', e=>{ t.startDate = e.target.value; scheduleSave(); renderPanel(); });
   qa('.meal-breakfast').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).breakfast = e.target.value; scheduleSave(); }));
   qa('.meal-lunch').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).lunch = e.target.value; scheduleSave(); }));
   qa('.meal-dinner').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).dinner = e.target.value; scheduleSave(); }));
@@ -4438,7 +4739,7 @@ function renderIdentityGate(){
     <div class="modal-backdrop" id="identityBackdrop">
       <div class="modal">
         <h2>Who's this?</h2>
-        <div class="section-note" style="margin-bottom:16px">Used to identify you on this shared trip ledger — not verified, just remembered on this device. What you can do depends on the access level set for your name.</div>
+        <div class="section-note" style="margin-bottom:16px">Used to identify you on this shared trip planner — not verified, just remembered on this device. What you can do depends on the access level set for your name.</div>
         <div class="field">
           <label>Full name</label>
           <input type="text" id="idName" placeholder="e.g. Vikash Deo">
@@ -4465,11 +4766,12 @@ function bindIdentityGate(){
 }
 
 /* ============================= New trip modal ============================= */
-function renderNewTripModal(fullscreen){
+function renderNewTripModal(){
+  const today = toISODateLocal(new Date());
   const content = `
     <div class="modal-backdrop" id="newTripBackdrop">
       <div class="modal">
-        <h2>${fullscreen? 'Start your trip ledger' : 'New trip'}</h2>
+        <h2>New trip</h2>
         <div class="field">
           <label>Trip name</label>
           <input type="text" id="newTripName" placeholder="e.g. Straddie Fishing 2027">
@@ -4482,11 +4784,21 @@ function renderNewTripModal(fullscreen){
             <button data-type="other"><span class="g">🧭</span>Other</button>
           </div>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Start date <span class="section-note" style="margin:0">(optional)</span></label>
+            <input type="date" id="newTripStartDate" value="${today}">
+          </div>
+          <div class="field">
+            <label>Number of days</label>
+            <input type="number" id="newTripDays" value="4" min="1" max="60">
+          </div>
+        </div>
         <div class="modal-actions">
-          ${!fullscreen ? '<button class="btn ghost sm" id="cancelNewTrip">Cancel</button>' : ''}
+          <button class="btn ghost sm" id="cancelNewTrip">Cancel</button>
           <button class="btn" id="confirmNewTrip">Create trip</button>
         </div>
-        ${DEVELOPER ? `<div class="section-note" style="margin-top:14px;text-align:center">Need to add a member or change who can edit? <a href="#" id="linkManageAccessFromNewTrip">👑 Manage Access</a></div>` : ''}
+        ${DEVELOPER ? `<div class="section-note" style="margin-top:14px;text-align:center">Need to add another Developer? <a href="#" id="linkManageAccessFromNewTrip">👑 Manage Access</a></div>` : ''}
       </div>
     </div>
   `;
@@ -4508,11 +4820,13 @@ function bindNewTripModal(){
     const nameInput = document.getElementById('newTripName');
     if(!nameInput) return; // modal already closed by an earlier click — nothing to do
     const name = (nameInput.value||'').trim() || (TYPE_META[chosenType].label);
-    createTrip(name, chosenType);
+    const startDate = document.getElementById('newTripStartDate').value || '';
+    const numDays = document.getElementById('newTripDays').value || 4;
+    createTrip(name, chosenType, startDate, numDays);
   });
   const backdrop = document.getElementById('newTripBackdrop');
   backdrop.addEventListener('click', (e)=>{
-    if(e.target===backdrop && state.trip){ state.showNewTripModal=false; render(); }
+    if(e.target===backdrop){ state.showNewTripModal=false; render(); }
   });
   const accessLink = document.getElementById('linkManageAccessFromNewTrip');
   if(accessLink) accessLink.addEventListener('click', (e)=>{
@@ -4577,9 +4891,10 @@ function bindImportModal(t){
 
 /* ============================= Manage Access (Developer only) ============================= */
 function renderManageAccessModal(){
+  const GLOBAL_LEVELS = {developer: ACCESS_LEVELS.developer, member: ACCESS_LEVELS.member};
   const levelSelect = (u)=>`
     <select class="access-level-select">
-      ${Object.entries(ACCESS_LEVELS).map(([k,v])=>`<option value="${k}" ${u.level===k?'selected':''}>${v.label}</option>`).join('')}
+      ${Object.entries(GLOBAL_LEVELS).map(([k,v])=>`<option value="${k}" ${u.level===k?'selected':''}>${v.label}</option>`).join('')}
     </select>
   `;
   const rows = state.userDirectory.map((u,i)=>`
@@ -4595,9 +4910,9 @@ function renderManageAccessModal(){
       <div class="modal" style="max-width:560px">
         <h2>👑 Manage Access</h2>
         <div class="section-note" style="margin-bottom:14px">
-          Who can sign in and what they can do. <b>Developer</b> can edit everything and manage this list.
-          <b>Admin</b> can edit trip content but not this list. <b>Member</b> is read-only. Access is matched by
-          the exact name someone types in when they sign in.
+          This list is only for <b>Developer</b> access — sees and edits every trip, and manages this list.
+          Everyone else is a <b>Member</b> by default. Trip Admin is separate and per-trip: whoever creates
+          a trip becomes its admin automatically, and can promote others within that trip's People tab.
         </div>
         <table>
           <thead><tr><th class="wide-col">Name</th><th>Level</th><th></th></tr></thead>
@@ -4647,7 +4962,7 @@ function bindManageAccessModal(){
       showMsg('Saved.', false);
       // If the person being changed is ME, my own access updates live.
       if(state.identity && entry.name.trim().toLowerCase()===state.identity.name.trim().toLowerCase()){
-        computeAdmin();
+        computeGlobalLevel();
       }
     });
   });
@@ -4736,6 +5051,7 @@ function bindInviteModal(){
 
 function applyImport(t, data){
   if(data.name) t.name = String(data.name);
+  if(data.type && TYPE_META[data.type]) t.type = data.type;
   if(data.startDate !== undefined) t.startDate = String(data.startDate||'');
   if(data.catchLogEnabled !== undefined) t.catchLogEnabled = !!data.catchLogEnabled;
   if(data.location){
