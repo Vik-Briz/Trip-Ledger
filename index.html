@@ -3043,6 +3043,10 @@ import {
 import {
   getStorage, ref, uploadString, getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut, sendPasswordResetEmail, sendEmailVerification, updateProfile, reload,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp35VXNCqUZGuQOFKfkBO-LZY9wTKyB7Y",
@@ -3059,6 +3063,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 // browser extensions. This detects that case and falls back automatically.
 const db = initializeFirestore(firebaseApp, {experimentalAutoDetectLongPolling: true});
 const storage = getStorage(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 /* ============================= Storage helpers ============================= */
 /* Personal (per-device) data uses plain localStorage — this file is meant to be
@@ -3246,7 +3251,9 @@ const state = {
   inviteForTripId: null, // when set, Invite generates a link that auto-joins that specific trip
   developerMaintenanceMode: false, // explicit, off-by-default opt-in — Developer troubleshooting any trip without being personally added, always OFF at the start of a session
   loaded: false,
-  identity: null,     // {name, phone}
+  identity: null,     // {name, phone, email, uid} — only set once signed in AND email-verified
+  authUser: null,     // raw Firebase Auth user (may be signed in but not yet verified)
+  authMode: 'signin', // 'signin' | 'signup' — which form the identity gate shows
   userDirectory: [],  // [{name, level: 'developer'|'member'}] — GLOBAL, shared across all trips. Admin is not stored here — see each trip's people[].isTripAdmin.
   legacyGlobalAdmins: [], // lowercase names that WERE globally 'admin' before this model existed — used once to grandfather them into admin on trips they're already part of
 };
@@ -3608,20 +3615,16 @@ function touchIndex(){
   storeSet('trips-index', state.tripsIndex, true);
 }
 
-async function loadIdentity(){
-  return await storeGet('my-identity', false);
-}
-async function saveIdentity(name, phone){
-  state.identity = {name: name.trim(), phone: (phone||'').trim()};
-  await storeSet('my-identity', state.identity, false);
-  await loadUserDirectory();
-  computeGlobalLevel();
+// Builds the same {name, phone} shape every existing per-trip/directory
+// name-matching check already relies on — nothing downstream needed to
+// change when this replaced the old free-text name entry. phone is no
+// longer collected at sign-up (real accounts don't need it for identity);
+// it stays editable per-person in the Members table as before.
+function identityFromAuthUser(user){
+  return {name: user.displayName || '', phone: '', email: user.email || '', uid: user.uid};
 }
 async function clearIdentity(){
-  state.identity = null;
-  ADMIN = false;
-  await storeSet('my-identity', null, false);
-  render();
+  await signOut(auth); // triggers onAuthStateChanged, which handles the rest
 }
 
 /* ============================= Swipe-to-switch-tabs ============================= */
@@ -3674,11 +3677,21 @@ setupSwipeNav();
 // If someone arrived via a scanned QR code (see the Invite feature), the
 // trip id is baked into the link as ?t=... — connect straight into that
 // trip instead of making them find it on My Plans themselves.
-let pendingJoinTripId = null;
+//
+// This now has to survive a page reload, not just live in memory: sign-up
+// requires leaving the tab to click an email verification link, and someone
+// might refresh the original tab instead of just returning to it — so this
+// is backed by localStorage, not a plain variable, to survive that gap.
+const LS_PENDING_JOIN_KEY = 'tripledger.pendingJoinTripId';
+function getPendingJoinTripId(){ return localStorage.getItem(LS_PENDING_JOIN_KEY) || null; }
+function setPendingJoinTripId(id){
+  if(id) localStorage.setItem(LS_PENDING_JOIN_KEY, id);
+  else localStorage.removeItem(LS_PENDING_JOIN_KEY);
+}
 function autoConnectFromUrlParam(){
   const params = new URLSearchParams(window.location.search);
   const t = params.get('t');
-  if(t) pendingJoinTripId = t;
+  if(t) setPendingJoinTripId(t);
   if(t){
     // Clean the URL so the trip id isn't left sitting in the address bar /
     // browser history for anyone who looks over a shoulder.
@@ -3687,17 +3700,30 @@ function autoConnectFromUrlParam(){
   }
 }
 
-async function init(){
-  autoConnectFromUrlParam();
-  state.identity = await loadIdentity();
-  if(!state.identity){
+// Fires once on load (after Firebase Auth checks any persisted session) and
+// again on every sign-in/sign-out — this is what drives which gate screen
+// shows, not a one-shot check like the old localStorage version.
+async function handleAuthStateChange(user){
+  state.authUser = user;
+  if(!user || !user.emailVerified){
+    // Signed out, OR signed in but hasn't clicked the verification link yet
+    // — either way, no usable identity. render() decides which of the two
+    // gate screens to show based on state.authUser.
+    state.identity = null;
+    ADMIN = false;
     state.loaded = true;
     render();
     return;
   }
+  state.identity = identityFromAuthUser(user);
   await loadUserDirectory();
   computeGlobalLevel();
-  await loadTripsAndTrip();
+  await loadTripsAndTrip(); // ends with its own render()
+}
+
+function init(){
+  autoConnectFromUrlParam();
+  onAuthStateChanged(auth, handleAuthStateChange);
 }
 
 async function loadTripsAndTrip(){
@@ -3730,6 +3756,7 @@ async function loadTripsAndTrip(){
   // (if not already in it) BEFORE the membership filter below runs, so it's
   // guaranteed to show up instead of landing on an empty "no trips" screen.
   let justJoinedTripId = null;
+  const pendingJoinTripId = getPendingJoinTripId();
   if(pendingJoinTripId && state.plansCache[pendingJoinTripId]){
     const t = state.plansCache[pendingJoinTripId];
     const myName = String(state.identity.name||'').trim().toLowerCase();
@@ -3740,7 +3767,7 @@ async function loadTripsAndTrip(){
     }
     justJoinedTripId = pendingJoinTripId;
   }
-  pendingJoinTripId = null;
+  setPendingJoinTripId(null);
 
   // Everyone — Developer included — only sees trips they're actually part of
   // (their name appears in that trip's People list), UNLESS Developer has
@@ -3946,6 +3973,11 @@ function render(){
   const app = document.getElementById('app');
   if(!state.loaded){ app.innerHTML = ''; return; }
   if(!state.identity){
+    if(state.authUser && !state.authUser.emailVerified){
+      app.innerHTML = renderVerifyEmailGate();
+      bindVerifyEmailGate();
+      return;
+    }
     app.innerHTML = renderIdentityGate();
     bindIdentityGate();
     return;
@@ -5190,33 +5222,166 @@ function findActivity(t,id){ return t.activities.find(a=>a.id===id); }
 
 /* ============================= Identity gate ============================= */
 function renderIdentityGate(){
+  const isSignup = state.authMode === 'signup';
   return `
     <div class="modal-backdrop" id="identityBackdrop">
       <div class="modal">
-        <h2>Who's this?</h2>
-        <div class="section-note" style="margin-bottom:16px">Used to identify you on this shared trip planner — not verified, just remembered on this device. What you can do depends on the access level set for your name.</div>
+        <h2>${isSignup ? 'Create your account' : 'Sign in'}</h2>
+        <div class="section-note" style="margin-bottom:16px">
+          ${isSignup
+            ? 'This name is what\u2019s matched against trips and access levels — use the same one you (or your trip admin) already use.'
+            : 'Sign in to see your trips.'}
+        </div>
+        ${isSignup ? `
         <div class="field">
           <label>Full name</label>
-          <input type="text" id="idName" placeholder="e.g. Vikash Deo">
+          <input type="text" id="authName" placeholder="e.g. Vikash Deo">
+        </div>` : ''}
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="authEmail" placeholder="you@example.com">
         </div>
         <div class="field">
-          <label>Mobile number</label>
-          <input type="text" id="idPhone" placeholder="04xx xxx xxx">
+          <label>Password</label>
+          <input type="password" id="authPassword" placeholder="At least 6 characters">
         </div>
         <div class="modal-actions">
-          <button class="btn" id="confirmIdentity">Continue</button>
+          <button class="btn" id="authSubmit">${isSignup ? 'Create account' : 'Sign in'}</button>
+        </div>
+        <div id="authStatus" class="section-note" style="margin-top:10px"></div>
+        <div class="section-note" style="margin-top:16px;text-align:center">
+          <a href="#" id="authToggleMode">${isSignup ? 'Already have an account? Sign in' : 'New here? Create an account'}</a>
+          ${isSignup ? '' : `<br><a href="#" id="authForgotPassword" style="display:inline-block;margin-top:6px">Forgot password?</a>`}
         </div>
       </div>
     </div>
   `;
 }
 function bindIdentityGate(){
-  document.getElementById('confirmIdentity').addEventListener('click', async ()=>{
-    const name = document.getElementById('idName').value.trim();
-    const phone = document.getElementById('idPhone').value.trim();
-    if(!name){ document.getElementById('idName').focus(); return; }
-    await saveIdentity(name, phone);
-    await loadTripsAndTrip();
+  const statusEl = document.getElementById('authStatus');
+  const setStatus = (msg, isError)=>{ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--danger)' : 'var(--ink-soft)'; };
+
+  document.getElementById('authToggleMode').addEventListener('click', (e)=>{
+    e.preventDefault();
+    state.authMode = state.authMode==='signup' ? 'signin' : 'signup';
+    render();
+  });
+  const forgotLink = document.getElementById('authForgotPassword');
+  if(forgotLink) forgotLink.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const emailField = document.getElementById('authEmail');
+    const email = (emailField.value||'').trim() || prompt('Enter your account email:');
+    if(!email) return;
+    try{
+      await sendPasswordResetEmail(auth, email);
+      setStatus('Reset link sent to '+email+' — check your inbox.', false);
+    }catch(e){
+      setStatus(authErrorMessage(e), true);
+    }
+  });
+
+  document.getElementById('authSubmit').addEventListener('click', async ()=>{
+    const isSignup = state.authMode === 'signup';
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    const nameField = document.getElementById('authName');
+    const name = nameField ? nameField.value.trim() : '';
+    if(isSignup && !name){ nameField.focus(); return; }
+    if(!email){ document.getElementById('authEmail').focus(); return; }
+    if(!password){ document.getElementById('authPassword').focus(); return; }
+
+    const btn = document.getElementById('authSubmit');
+    btn.disabled = true;
+    setStatus(isSignup ? 'Creating your account…' : 'Signing in…', false);
+    try{
+      if(isSignup){
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(cred.user, {displayName: name});
+        await sendEmailVerification(cred.user);
+        // onAuthStateChanged fires from the sign-up itself — it'll see an
+        // unverified user and render() will switch to the verify-email gate.
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    }catch(e){
+      setStatus(authErrorMessage(e), true);
+      btn.disabled = false;
+    }
+  });
+}
+
+// Firebase's raw error codes aren't something to show someone mid-signup —
+// map the common ones to plain language, fall back to the raw message for
+// anything unexpected rather than silently swallowing it.
+function authErrorMessage(e){
+  const map = {
+    'auth/email-already-in-use': 'That email already has an account — try signing in instead.',
+    'auth/invalid-email': 'That doesn\u2019t look like a valid email address.',
+    'auth/weak-password': 'Password needs to be at least 6 characters.',
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/wrong-password': 'Email or password is incorrect.',
+    'auth/user-not-found': 'No account found for that email — check for a typo, or create an account.',
+    'auth/too-many-requests': 'Too many attempts — wait a bit before trying again.',
+  };
+  return map[e.code] || String(e.message || e);
+}
+
+/* ============================= Verify email gate ============================= */
+function renderVerifyEmailGate(){
+  const email = escapeHtml((state.authUser && state.authUser.email) || '');
+  return `
+    <div class="modal-backdrop" id="verifyBackdrop">
+      <div class="modal">
+        <h2>Check your email</h2>
+        <div class="section-note" style="margin-bottom:16px">
+          We sent a verification link to <b>${email}</b>. Click it, then come back here and continue.
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="verifyCheckAgain">I've verified — continue</button>
+        </div>
+        <div id="verifyStatus" class="section-note" style="margin-top:10px"></div>
+        <div class="section-note" style="margin-top:16px;text-align:center">
+          <a href="#" id="verifyResend">Resend verification email</a>
+          &nbsp;&middot;&nbsp;
+          <a href="#" id="verifySignOut">Use a different account</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function bindVerifyEmailGate(){
+  const statusEl = document.getElementById('verifyStatus');
+  const setStatus = (msg, isError)=>{ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--danger)' : 'var(--ink-soft)'; };
+
+  document.getElementById('verifyCheckAgain').addEventListener('click', async ()=>{
+    const btn = document.getElementById('verifyCheckAgain');
+    btn.disabled = true;
+    setStatus('Checking…', false);
+    try{
+      await reload(auth.currentUser);
+      if(auth.currentUser.emailVerified){
+        await handleAuthStateChange(auth.currentUser);
+      } else {
+        setStatus('Still not verified — click the link in the email first, then try again.', true);
+        btn.disabled = false;
+      }
+    }catch(e){
+      setStatus(authErrorMessage(e), true);
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('verifyResend').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    try{
+      await sendEmailVerification(auth.currentUser);
+      setStatus('Sent — check your inbox (and spam folder).', false);
+    }catch(e){
+      setStatus(authErrorMessage(e), true);
+    }
+  });
+  document.getElementById('verifySignOut').addEventListener('click', async (e)=>{
+    e.preventDefault();
+    await clearIdentity();
   });
 }
 
