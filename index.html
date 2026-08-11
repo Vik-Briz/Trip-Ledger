@@ -204,7 +204,8 @@
   /* Members table specifically: names don't need as much room as Item/Category
      text elsewhere, and mobile numbers were getting clipped without a
      guaranteed minimum — this fixes both in one pass. */
-  .name-col{width:18%; min-width:110px;}
+  .name-col{width:22%; min-width:140px;}
+  .name-col input{min-width:130px;}
   .mobile-col{width:auto; min-width:112px;}
   .mobile-col input{min-width:100px;}
   .check-col{width:34px; text-align:center; padding-left:4px; padding-right:4px;}
@@ -280,6 +281,16 @@
     text-align:center; padding:36px 20px; color:var(--ink-soft); font-style:italic;
     border:1.5px dashed var(--line); border-radius:8px;
   }
+  .empty-glyph{font-size:26px; display:block; margin-bottom:8px; font-style:normal;}
+  .empty-title{
+    font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:.04em; font-size:13px;
+    color:var(--pine-deep); font-style:normal; font-weight:600; margin-bottom:4px;
+  }
+  .empty .btn{font-style:normal; margin-top:14px;}
+  .empty-link{
+    font-style:normal; text-decoration:underline dotted; cursor:pointer; color:var(--pine); font-weight:600;
+  }
+  .empty-link:hover{color:var(--pine-deep);}
 
   .loading-screen{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -575,6 +586,37 @@
       max-width:100%;
       margin-bottom:14px;
     }
+
+    /* Members table: cards instead of a side-scrolling spreadsheet.
+       Each person becomes one card — Name up top as the card's heading
+       (no truncation, no horizontal scroll to find it), every other field
+       stacked below as a label:value row using the data-label attribute
+       already present on each <td>. */
+    .stack-mobile{ min-width:0 !important; }
+    .stack-mobile thead{ display:none; }
+    .stack-mobile, .stack-mobile tbody{ display:block; width:100%; }
+    .stack-mobile tr{
+      display:block; background:#fff; border:1px solid var(--line); border-radius:8px;
+      padding:4px 12px; margin-bottom:10px;
+    }
+    .stack-mobile tr.subtotal{ background:var(--paper-dark); border-color:var(--line); }
+    .stack-mobile td{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px dashed var(--line-soft); padding:8px 0; white-space:normal;
+    }
+    .stack-mobile td:last-child{ border-bottom:none; }
+    .stack-mobile td[data-label]::before{
+      content:attr(data-label);
+      font-family:'Oswald',sans-serif; text-transform:uppercase; font-size:10px; letter-spacing:.05em;
+      color:var(--ink-soft); flex:none;
+    }
+    .stack-mobile td input, .stack-mobile td select{ text-align:right; flex:1; min-width:0; width:auto; }
+    .stack-mobile .name-col{ border-bottom:2px solid var(--line); }
+    .stack-mobile .name-col::before{ content:none; }
+    .stack-mobile .name-col input{
+      font-family:'Oswald',sans-serif; font-weight:600; font-size:15px; text-align:left; color:var(--pine-deep);
+    }
+    .stack-mobile .row-actions{ justify-content:flex-end; padding-top:10px; }
   }
   .scroll-hint{ display:none; font-size:11px; color:var(--ink-soft); font-style:italic; margin:-6px 0 8px; }
   .tab-swipe-dots{ display:none; }
@@ -2990,6 +3032,7 @@ var qrcode = function() {
    opened as a real, standalone page (from Drive, email, wherever), not inside
    the Claude.ai artifact sandbox, so localStorage works normally here. */
 const LS_BACKEND_URL_KEY = 'tripledger.backendUrl';
+const LS_LAST_CURRENCY_KEY = 'tripledger.lastCurrency';
 
 function lsGet(key){
   try{ const v = localStorage.getItem(key); return v===null ? null : JSON.parse(v); }
@@ -3094,8 +3137,36 @@ function renderBackendChip(){
 }
 
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
-function money(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:0}); }
-function money2(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+const DEFAULT_CURRENCY = 'AUD';
+// Common currencies for the picker — code, symbol (for the compact $-prefixed
+// input widget), and label. Intl.NumberFormat handles any valid ISO 4217 code
+// even if it's not in this list, so this is just what shows up as quick picks.
+const CURRENCIES = {
+  AUD: {symbol:'$',  label:'Australian Dollar'},
+  USD: {symbol:'$',  label:'US Dollar'},
+  NZD: {symbol:'$',  label:'NZ Dollar'},
+  GBP: {symbol:'£',  label:'British Pound'},
+  EUR: {symbol:'€',  label:'Euro'},
+  CAD: {symbol:'$',  label:'Canadian Dollar'},
+  SGD: {symbol:'$',  label:'Singapore Dollar'},
+  JPY: {symbol:'¥',  label:'Japanese Yen'},
+  VND: {symbol:'₫',  label:'Vietnamese Dong'},
+  FJD: {symbol:'$',  label:'Fijian Dollar'},
+};
+// currency is optional — pass it explicitly when formatting a trip that
+// isn't the currently-open one (e.g. each card on the My Plans list, which
+// shows several trips, possibly with different currencies, at once).
+function money(n, currency){
+  n = Number(n)||0;
+  const code = currency || (state.trip && state.trip.currency) || DEFAULT_CURRENCY;
+  try{
+    return new Intl.NumberFormat(undefined, {style:'currency', currency: code}).format(n);
+  }catch(e){
+    // Invalid/unrecognised currency code — fall back rather than throw.
+    return '$' + n.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+}
+function money2(n, currency){ return money(n, currency); } // alias — kept for existing call sites
 // A $-prefixed number input — used for every editable budget/actual/paid/amount
 // field so the currency symbol is always visible, and every figure shows 2
 // decimal places, matching how the read-only "Actual" column already looks.
@@ -3103,12 +3174,14 @@ function moneyField(cls, value, extraAttrs){
   const v = (Math.round((Number(value)||0) * 100) / 100).toFixed(2);
   const attrs = extraAttrs || '';
   const stepAttr = /\bstep=/.test(attrs) ? '' : 'step="0.01"';
+  const code = (state.trip && state.trip.currency) || DEFAULT_CURRENCY;
+  const symbol = (CURRENCIES[code] && CURRENCIES[code].symbol) || code + ' ';
   // Width is sized to THIS value's own character count (ch units), not a
   // generic fixed width — a fixed width wider than the content leaves empty
   // space inside the (transparent-background) input, which shows through as
   // a false gap between the $ and the number. +2.5ch covers the spin buttons.
   const w = (v.length + 2.5).toFixed(1);
-  return `<span class="money-input-wrap"><span class="currency-prefix">$</span><input type="number" class="${cls}" value="${v}" style="width:${w}ch" ${stepAttr} ${attrs}></span>`;
+  return `<span class="money-input-wrap"><span class="currency-prefix">${symbol}</span><input type="number" class="${cls}" value="${v}" style="width:${w}ch" ${stepAttr} ${attrs}></span>`;
 }
 
 // Bootstrap seed for the very first time this app connects to a fresh Sheet —
@@ -3229,11 +3302,26 @@ const TYPE_META = {
   other:   {glyph:'🧭', label:'Trip'},
 };
 
-function newTrip(name, type){
+// Seed suggestions for the Shopping List "Item" field's autocomplete —
+// common fishing/camping items, so type-ahead has something to suggest even
+// on a brand new trip with no items entered yet. Actual items already used
+// (this trip and others) are merged in on top of this list, see renderShopping.
+const COMMON_SHOPPING_ITEMS = [
+  'Sunscreen','Bug spray','Ice','Esky/Cooler','Bait','Berley','Fishing line','Hooks','Sinkers',
+  'Tackle box','Rod holders','Gaff','Fillet knife','Fish bag','Life jackets','First aid kit',
+  'Torch/Headlamp','Batteries','Matches/Lighter','Firewood','Tent pegs','Rope/Cordage','Tarp',
+  'Sleeping bag','Sleeping mat','Camp chairs','Water (drinking)','Water container','Gas bottle',
+  'Bread','Milk','Eggs','Butter','Tea/Coffee','Sugar','Snacks','BBQ/Charcoal','Cooking oil',
+  'Paper towels','Bin bags','Toilet paper','Hand sanitiser','Sunglasses','Hat','Wet weather gear',
+  'Gumboots','Anchor','Fuel (boat/car)','Phone charger/power bank','Maps (offline/paper)',
+];
+
+function newTrip(name, type, currency){
   return {
     id: uid(),
     name: name || 'New Trip',
     type: type || 'fishing',
+    currency: currency || DEFAULT_CURRENCY,
     createdAt: Date.now(),
     photo: null,               // base64 data URL of cover photo
     location: {name:'', mapsUrl:''},
@@ -3731,12 +3819,12 @@ let actionInProgress = false;
 // Anyone signed in can create a trip — they automatically become ITS admin
 // and can invite others / promote them within it. There's no global "Admin"
 // gate here anymore, only Developer (which can always create too, obviously).
-async function createTrip(name, type, startDate, numDays){
+async function createTrip(name, type, startDate, numDays, currency){
   if(!state.identity || actionInProgress) return;
   actionInProgress = true;
   try{
     showLoading('Creating trip…');
-    const t = newTrip(name, type);
+    const t = newTrip(name, type, currency);
     t.startDate = startDate || '';
     const n = Math.max(1, Number(numDays)||1);
     t.days = Array.from({length:n}, (_,i)=>({id:uid(), label:'Day '+(i+1), breakfast:'', lunch:'', dinner:''}));
@@ -3791,6 +3879,7 @@ async function duplicateTripById(id){
       id: uid(),
       name: name.trim(),
       type: src.type,
+      currency: src.currency || DEFAULT_CURRENCY,
       createdAt: Date.now(),
       photo: src.photo,
       location: {...src.location},
@@ -3944,6 +4033,13 @@ function renderTripScreen(){
               ? `📅 <input type="date" id="tripStartDateHeader" value="${escapeHtml(t.startDate||'')}" class="header-date-input">${t.startDate ? `<span class="trip-date-range">→ ${formatDayDate(tripEndDate(t))}</span>` : ''}`
               : (t.startDate ? `📅 ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))}` : '')}
           </div>
+          <div class="loc-line">
+            ${ADMIN
+              ? `💱 <select id="tripCurrencyHeader" class="header-date-input" style="width:auto">
+                   ${Object.keys(CURRENCIES).map(code=>`<option value="${code}" ${code===(t.currency||DEFAULT_CURRENCY)?'selected':''}>${code}</option>`).join('')}
+                 </select>`
+              : `💱 ${t.currency||DEFAULT_CURRENCY}`}
+          </div>
         </div>
       </div>
       <div class="stats">
@@ -3988,6 +4084,8 @@ function renderTripScreen(){
     if(locBtn) locBtn.addEventListener('click', ()=>editLocation(t));
     const dateInput = document.getElementById('tripStartDateHeader');
     if(dateInput) dateInput.addEventListener('change', e=>{ t.startDate = e.target.value; scheduleSave(); render(); });
+    const currencyInput = document.getElementById('tripCurrencyHeader');
+    if(currencyInput) currencyInput.addEventListener('change', e=>{ t.currency = e.target.value; scheduleSave(); render(); });
   }
   bindIdentityBadge();
   renderPanel();
@@ -4029,9 +4127,9 @@ function renderPlansScreen(){
           <div class="plan-card-sub">${meta.label} &middot; ${t.people.length} member${t.people.length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
           <div class="plan-card-dates">${dateLine}</div>
           <div class="plan-card-stats">
-            <div class="stat-chip sm"><b>${money(g.budget)}</b><span>Budget</span></div>
-            <div class="stat-chip sm"><b>${money(g.actual)}</b><span>Actual</span></div>
-            <div class="stat-chip sm ${surplus>=0?'ok':'warn'}"><b>${surplus>=0?'+':''}${money(surplus)}</b><span>${surplus>=0?'Surplus':'Shortfall'}</span></div>
+            <div class="stat-chip sm"><b>${money(g.budget, t.currency)}</b><span>Budget</span></div>
+            <div class="stat-chip sm"><b>${money(g.actual, t.currency)}</b><span>Actual</span></div>
+            <div class="stat-chip sm ${surplus>=0?'ok':'warn'}"><b>${surplus>=0?'+':''}${money(surplus, t.currency)}</b><span>${surplus>=0?'Surplus':'Shortfall'}</span></div>
           </div>
         </div>
       </div>
@@ -4052,7 +4150,10 @@ function renderPlansScreen(){
     <div class="plans-list">
       ${cards || `
         <div class="empty" style="margin-top:24px">
-          No trips yet — tap "+ Create" above to make your first one.
+          <span class="empty-glyph">🧭</span>
+          <div class="empty-title">No trips yet</div>
+          Start one and invite the group — costs, meals, and the itinerary all live in one place.
+          <div><button class="btn plans-header-btn-solid" id="btnCreateTripEmpty" style="margin-top:14px">+ Create your first trip</button></div>
         </div>
       `}
     </div>
@@ -4066,6 +4167,8 @@ function renderPlansScreen(){
     createTrip('New Trip', 'other', '', 1).then(()=>{ state.showInviteModal = false; state.showImportModal = true; render(); });
   });
   document.getElementById('btnCreateTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+  const btnCreateTripEmpty = document.getElementById('btnCreateTripEmpty');
+  if(btnCreateTripEmpty) btnCreateTripEmpty.addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
 
   document.querySelectorAll('.plan-card').forEach(card=>{
     const id = card.dataset.plan;
@@ -4153,12 +4256,24 @@ function renderIdentityBadge(inHeader){
   const name = escapeHtml(state.identity.name);
   const role = ACCESS_LEVELS[ACCESS_LEVEL].label;
   const roleBadgeId = 'roleBadge_' + (inHeader?'h':'p');
+  // Access level and backend settings are admin/developer concerns — a
+  // regular member never needs to see app-internal vocabulary like
+  // "Developer" or a way to change the backend, and broadcasting who holds
+  // the highest access level to every viewer is a bad idea given identity
+  // here is just a typed name, not a real login.
+  const showRoleAndSettings = ADMIN || DEVELOPER;
+  const roleBadgeHtml = showRoleAndSettings
+    ? ` &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;${inHeader?'':`color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)`}" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span>`
+    : '';
+  const settingsBtnHtml = showRoleAndSettings
+    ? `<button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px;${inHeader?'background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)':''}">⚙</button>`
+    : '';
   if(inHeader){
     return `
       <div class="header-identity">
         <span id="backendChip" class="backend-chip"></span>
-        <span>Viewing as <b>${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span></span>
-        <button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">⚙</button>
+        <span>Viewing as <b>${name}</b>${roleBadgeHtml}</span>
+        ${settingsBtnHtml}
         <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
       </div>
     `;
@@ -4166,8 +4281,8 @@ function renderIdentityBadge(inHeader){
   return `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
-      <span>Viewing as <b style="color:var(--pine-deep)">${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span></span>
-      <button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px">⚙</button>
+      <span>Viewing as <b style="color:var(--pine-deep)">${name}</b>${roleBadgeHtml}</span>
+      ${settingsBtnHtml}
       <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
     </div>
   `;
@@ -4193,6 +4308,14 @@ function bindIdentityBadge(){
 
 function tabBtn(key,label){
   return `<div class="tab ${state.tab===key?'active':''}" data-tab="${key}">${label}</div>`;
+}
+
+// Used by empty-state nudges that reference another tab (e.g. "add days in
+// Meal Plan first") — jumps straight there instead of leaving the person to
+// find the tab themselves.
+function goToTab(key){
+  state.tab = key;
+  render();
 }
 
 // Free place search (OpenStreetMap Nominatim) — no API key needed. Used for
@@ -4328,7 +4451,14 @@ function renderOverview(t){
       <table>
         <thead><tr><th class="wide-col">Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
         <tbody>
-          ${rows || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);font-style:italic;">Add cost lines or shopping items to see them here.</td></tr>`}
+          ${rows || `<tr><td colspan="4">
+            <div class="empty">
+              <span class="empty-glyph">🏠</span>
+              <div class="empty-title">Nothing to total up yet</div>
+              This fills in once you add <span class="empty-link jump-to-tab" data-tab="costs">cost lines</span>
+              or <span class="empty-link jump-to-tab" data-tab="shopping">shopping items</span>.
+            </div>
+          </td></tr>`}
           <tr class="grandtotal">
             <td class="wide-col" data-label="Category">Grand Total</td>
             <td class="num" data-label="Budget">${money(g.budget)}</td>
@@ -4409,7 +4539,15 @@ function renderPeople(t){
       <div class="section-note">Define what each type of member owes — e.g. Vehicle user vs Passenger, or a flat share.</div>
       <table>
         <thead><tr><th class="num">Code</th><th>Role</th><th class="num">Amount owed</th><th></th></tr></thead>
-        <tbody>${roleRows || `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);font-style:italic;">No roles yet.</td></tr>`}</tbody>
+        <tbody>${roleRows || `<tr><td colspan="4">
+          <div class="empty">
+            <span class="empty-glyph">🪢</span>
+            <div class="empty-title">No roles set up yet</div>
+            ${ADMIN
+              ? `Roles decide who owes what — e.g. "Vehicle user" vs "Passenger."<button class="btn ghost sm" id="addRoleEmpty">+ Add first role</button>`
+              : `The trip admin hasn\u2019t set up roles yet.`}
+          </div>
+        </td></tr>`}</tbody>
       </table>
     </div>
     <div class="panel-section">
@@ -4421,10 +4559,18 @@ function renderPeople(t){
       </div>
       <div class="section-note">Tick "Trip Admin" for anyone who should be able to edit this specific trip — the trip's creator gets it automatically.</div>
       <div class="table-scroll">
-      <table>
+      <table class="stack-mobile">
         <thead><tr><th class="name-col">Name</th><th class="mobile-col">Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
         <tbody>
-          ${peopleRows || `<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);font-style:italic;">No members added yet.</td></tr>`}
+          ${peopleRows || `<tr><td colspan="8">
+            <div class="empty">
+              <span class="empty-glyph">👥</span>
+              <div class="empty-title">Nobody\u2019s on this trip yet</div>
+              ${ADMIN
+                ? `Add everyone coming so you can track who owes what.<button class="btn ghost sm" id="addPersonEmpty">+ Add first member</button>`
+                : `Ask the trip admin to add you and the rest of the group.`}
+            </div>
+          </td></tr>`}
           <tr class="subtotal">
             <td colspan="4">Total</td>
             <td class="num" data-label="Owed">${money(totalOwed)}</td>
@@ -4469,7 +4615,13 @@ function renderCatchLog(t){
         <div class="section-head"><h2>Catch Log</h2>
           ${ADMIN?'<button class="btn ghost sm" id="btnDisableCatchLog">Turn off</button>':''}
         </div>
-        <div class="empty">Add members and days (in Meal Plan) to start logging catches.</div>
+        <div class="empty">
+          <span class="empty-glyph">🎣</span>
+          <div class="empty-title">Almost ready to log catches</div>
+          ${!t.people.length ? `You still need <span class="empty-link jump-to-tab" data-tab="people">members added</span>` : ''}
+          ${!t.people.length && !t.days.length ? ' and ' : ''}
+          ${!t.days.length ? `<span class="empty-link jump-to-tab" data-tab="meals">days set up</span>` : ''}.
+        </div>
       </div>
     `;
   }
@@ -4542,7 +4694,15 @@ function renderCosts(t){
       <table>
         <thead><tr><th class="wide-col">Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
         <tbody>
-          ${rows || `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);font-style:italic;">No cost lines yet.</td></tr>`}
+          ${rows || `<tr><td colspan="5">
+            <div class="empty">
+              <span class="empty-glyph">💰</span>
+              <div class="empty-title">No cost lines yet</div>
+              ${ADMIN
+                ? `Log the big shared costs here — accommodation, fuel, permits.<button class="btn ghost sm" id="addCostEmpty">+ Add first cost line</button>`
+                : `The trip admin hasn\u2019t added any costs yet.`}
+            </div>
+          </td></tr>`}
           <tr class="subtotal">
             <td>Subtotal</td>
             <td class="num" data-label="Budget">${money(totals.budget)}</td>
@@ -4593,7 +4753,13 @@ function renderMeals(t){
       </div>
       <div class="section-note">${t.startDate ? `Dates run ${formatDayDate(t.startDate)} → ${formatDayDate(tripEndDate(t))} — change the start date from the trip header above.` : (ADMIN ? 'No start date set yet — add one from the trip header above and each day here will date itself automatically.' : "This trip's dates haven't been set yet.")}</div>
       <div class="day-grid">
-        ${cards || `<div class="empty">No days added yet — add your first day of the trip.</div>`}
+        ${cards || `<div class="empty">
+          <span class="empty-glyph">🍽️</span>
+          <div class="empty-title">No days set up yet</div>
+          ${ADMIN
+            ? `Days drive your Meal Plan, Itinerary, and Catch Log all at once.<button class="btn ghost sm" id="addDayEmpty">+ Add first day</button>`
+            : `The trip admin hasn\u2019t set up any days yet.`}
+        </div>`}
       </div>
     </div>
   `;
@@ -4666,7 +4832,11 @@ function renderItinerary(t){
       <div class="section-head"><h2>🗓️ Itinerary</h2></div>
       <div class="section-note">Your trip timeline — flights, check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
       <div class="itinerary-timeline">
-        ${dayGroups || `<div class="empty">No days added yet — add days in the Meal Plan tab first.</div>`}
+        ${dayGroups || `<div class="empty">
+          <span class="empty-glyph">🗓️</span>
+          <div class="empty-title">No days set up yet</div>
+          Itinerary days come from Meal Plan — <span class="empty-link jump-to-tab" data-tab="meals">set up your days there</span> first.
+        </div>`}
       </div>
     </div>
   `;
@@ -4677,11 +4847,22 @@ function renderShopping(t){
   const totals = shoppingTotals(t);
   const catList = [...new Set(t.shopping.map(i=>i.category).filter(Boolean))];
   const storeList = [...new Set(t.shopping.map(i=>i.store).filter(Boolean))];
+  // Item-name autocomplete: curated common items, plus anything already
+  // typed on this trip or any of this person's other trips — so the list
+  // grows with actual use instead of staying static.
+  const otherTripItems = Object.values(state.plansCache||{}).flatMap(tr=>(tr.shopping||[]).map(i=>i.item));
+  const itemList = [...new Set([...COMMON_SHOPPING_ITEMS, ...otherTripItems, ...t.shopping.map(i=>i.item)].filter(Boolean))].sort();
   const colHeaders = `<th class="check-col"></th><th class="wide-col">Item</th><th>Store</th><th>Category</th><th class="num">Qty</th><th class="num">Budget</th><th class="num">Cost/Unit</th><th class="num">Actual</th><th></th>`;
 
   let body = '';
   if(!t.shopping.length){
-    body = `<div class="empty">No items yet — add what you need to buy, and group it by category or store.</div>`;
+    body = `<div class="empty">
+      <span class="empty-glyph">🛒</span>
+      <div class="empty-title">Your shopping list is empty</div>
+      ${ADMIN
+        ? `Food, alcohol, gear — group it by category or store as you go.<button class="btn ghost sm" id="addItemEmpty">+ Add first item</button>`
+        : `The trip admin hasn\u2019t added any items yet.`}
+    </div>`;
   } else if(state.shoppingView==='category'){
     const groups = groupShopping(t,'category');
     groups.forEach(gr=>{
@@ -4738,6 +4919,7 @@ function renderShopping(t){
       </div>
       <datalist id="catList">${catList.map(c=>`<option value="${escapeHtml(c)}">`).join('')}</datalist>
       <datalist id="storeList">${storeList.map(s=>`<option value="${escapeHtml(s)}">`).join('')}</datalist>
+      <datalist id="itemList">${itemList.map(i=>`<option value="${escapeHtml(i)}">`).join('')}</datalist>
     </div>
   `;
 }
@@ -4747,7 +4929,7 @@ function itemRow(item){
   const lineActual = (Number(item.qty)||0) * (Number(item.unitActual)||0);
   return `<tr data-item="${item.id}" class="${item.purchased?'purchased-row':''}">
     <td class="check-col" data-label=""><input type="checkbox" class="item-purchased" ${item.purchased?'checked':''} title="Purchased" ${RO}></td>
-    <td class="wide-col" data-label="Item"><input type="text" class="item-name" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
+    <td class="wide-col" data-label="Item"><input type="text" class="item-name" list="itemList" value="${escapeHtml(item.item)}" placeholder="Item" ${RO}></td>
     <td data-label="Store"><input type="text" class="item-store" list="storeList" value="${escapeHtml(item.store||'')}" placeholder="Store" ${RO}></td>
     <td data-label="Category"><input type="text" class="item-category" list="catList" value="${escapeHtml(item.category||'')}" placeholder="Category" ${RO}></td>
     <td class="num" data-label="Qty"><input type="number" class="item-qty" value="${item.qty??1}" ${RO}></td>
@@ -4762,6 +4944,9 @@ function itemRow(item){
 function bindPanelEvents(){
   const t = state.trip;
 
+  // EMPTY-STATE NUDGES that jump to another tab
+  qa('.jump-to-tab').forEach(el=>el.addEventListener('click', ()=> goToTab(el.dataset.tab)));
+
   // ROLES
   qa('.role-label').forEach(el=>el.addEventListener('input', e=>{
     findRole(t, rowId(e)).label = e.target.value; scheduleSave();
@@ -4773,9 +4958,9 @@ function bindPanelEvents(){
   qa('.role-del').forEach(el=>el.addEventListener('click', e=>{
     const id = rowId(e); t.roles = t.roles.filter(r=>r.id!==id); scheduleSave(); renderPanel();
   }));
-  id('addRole') && id('addRole').addEventListener('click', ()=>{
-    t.roles.push({id:uid(), label:'New role', amount:0}); scheduleSave(); renderPanel();
-  });
+  const addRoleHandler = ()=>{ t.roles.push({id:uid(), label:'New role', amount:0}); scheduleSave(); renderPanel(); };
+  id('addRole') && id('addRole').addEventListener('click', addRoleHandler);
+  id('addRoleEmpty') && id('addRoleEmpty').addEventListener('click', addRoleHandler);
 
   // BALANCE FORWARD
   qa('.balance-forward-label').forEach(el=>el.addEventListener('input', e=>{
@@ -4830,9 +5015,9 @@ function bindPanelEvents(){
     }
     renderPanel();
   }));
-  id('addPerson') && id('addPerson').addEventListener('click', ()=>{
-    t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel();
-  });
+  const addPersonHandler = ()=>{ t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel(); };
+  id('addPerson') && id('addPerson').addEventListener('click', addPersonHandler);
+  id('addPersonEmpty') && id('addPersonEmpty').addEventListener('click', addPersonHandler);
   id('btnInviteToTrip') && id('btnInviteToTrip').addEventListener('click', ()=>{
     state.inviteForTripId = t.id; state.showInviteModal = true; render();
   });
@@ -4861,9 +5046,9 @@ function bindPanelEvents(){
   qa('.cost-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e); t.costs = t.costs.filter(c=>c.id!==idv); scheduleSave(); renderPanel();
   }));
-  id('addCost') && id('addCost').addEventListener('click', ()=>{
-    t.costs.push({id:uid(), label:'New cost', budget:0, actual:0}); scheduleSave(); renderPanel();
-  });
+  const addCostHandler = ()=>{ t.costs.push({id:uid(), label:'New cost', budget:0, actual:0}); scheduleSave(); renderPanel(); };
+  id('addCost') && id('addCost').addEventListener('click', addCostHandler);
+  id('addCostEmpty') && id('addCostEmpty').addEventListener('click', addCostHandler);
 
   // MEALS
   qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
@@ -4873,9 +5058,9 @@ function bindPanelEvents(){
   qa('.day-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e,'day'); t.days = t.days.filter(d=>d.id!==idv); scheduleSave(); renderPanel();
   }));
-  id('addDay') && id('addDay').addEventListener('click', ()=>{
-    t.days.push({id:uid(), label:'Day '+(t.days.length+1), date:'', breakfast:'', lunch:'', dinner:''}); scheduleSave(); renderPanel();
-  });
+  const addDayHandler = ()=>{ t.days.push({id:uid(), label:'Day '+(t.days.length+1), date:'', breakfast:'', lunch:'', dinner:''}); scheduleSave(); renderPanel(); };
+  id('addDay') && id('addDay').addEventListener('click', addDayHandler);
+  id('addDayEmpty') && id('addDayEmpty').addEventListener('click', addDayHandler);
 
   // ITINERARY
   qa('.activity-type').forEach(el=>el.addEventListener('change', e=>{
@@ -4977,9 +5162,9 @@ function bindPanelEvents(){
   qa('.item-purchased').forEach(el=>el.addEventListener('change', e=>{
     findItem(t, rowId(e,'item')).purchased = e.target.checked; scheduleSave(); renderPanel();
   }));
-  id('addItem') && id('addItem').addEventListener('click', ()=>{
-    t.shopping.push({id:uid(), item:'', category:'', store:'', qty:1, budget:0, unitActual:0, purchased:false}); scheduleSave(); state.shoppingView='category'; renderPanel();
-  });
+  const addItemHandler = ()=>{ t.shopping.push({id:uid(), item:'', category:'', store:'', qty:1, budget:0, unitActual:0, purchased:false}); scheduleSave(); state.shoppingView='category'; renderPanel(); };
+  id('addItem') && id('addItem').addEventListener('click', addItemHandler);
+  id('addItemEmpty') && id('addItemEmpty').addEventListener('click', addItemHandler);
   qa('.group-add-btn').forEach(el=>el.addEventListener('click', ()=>{
     if(el.dataset.addCategory !== undefined){
       t.shopping.push({id:uid(), item:'', category:el.dataset.addCategory, store:'', qty:1, budget:0, unitActual:0, purchased:false});
@@ -5112,6 +5297,14 @@ function renderNewTripModal(){
             <input type="number" id="newTripDays" value="4" min="1" max="60">
           </div>
         </div>
+        <div class="field">
+          <label>Currency</label>
+          <select id="newTripCurrency">
+            ${Object.entries(CURRENCIES).map(([code,c])=>
+              `<option value="${code}" ${code===(localStorage.getItem(LS_LAST_CURRENCY_KEY)||DEFAULT_CURRENCY)?'selected':''}>${code} — ${c.label}</option>`
+            ).join('')}
+          </select>
+        </div>
         <div class="modal-actions">
           <button class="btn ghost sm" id="cancelNewTrip">Cancel</button>
           <button class="btn" id="confirmNewTrip">Create trip</button>
@@ -5140,7 +5333,9 @@ function bindNewTripModal(){
     const name = (nameInput.value||'').trim() || (TYPE_META[chosenType].label);
     const startDate = document.getElementById('newTripStartDate').value || '';
     const numDays = document.getElementById('newTripDays').value || 4;
-    createTrip(name, chosenType, startDate, numDays);
+    const currency = document.getElementById('newTripCurrency').value || DEFAULT_CURRENCY;
+    localStorage.setItem(LS_LAST_CURRENCY_KEY, currency); // remembered as the default for next time
+    createTrip(name, chosenType, startDate, numDays, currency);
   });
   const backdrop = document.getElementById('newTripBackdrop');
   backdrop.addEventListener('click', (e)=>{
@@ -5397,6 +5592,7 @@ function bindInviteModal(){
 function applyImport(t, data){
   if(data.name) t.name = String(data.name);
   if(data.type && TYPE_META[data.type]) t.type = data.type;
+  if(data.currency && CURRENCIES[String(data.currency).toUpperCase()]) t.currency = String(data.currency).toUpperCase();
   if(data.startDate !== undefined) t.startDate = String(data.startDate||'');
   if(data.catchLogEnabled !== undefined) t.catchLogEnabled = !!data.catchLogEnabled;
   if(data.location){
