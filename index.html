@@ -3026,12 +3026,44 @@ var qrcode = function() {
 }));
 
 </script>
-<script>
+<script type="module">
+/* ============================= Firebase ============================= */
+/* Trip-Ledger's shared data now lives in Firebase (Firestore + Storage)
+   instead of a per-deployment Google Apps Script + Sheet. Unlike the old
+   backend, this config is baked into the app itself — nobody using this
+   file needs to set up or paste in their own backend URL anymore.
+
+   NOTE: this apiKey is not a secret — it just identifies the Firebase
+   project publicly. Real access control lives in Firestore/Storage
+   Security Rules (console-side), not in keeping this key hidden. */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  initializeFirestore, doc, getDoc, setDoc, collection,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getStorage, ref, uploadString, getDownloadURL,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAp35VXNCqUZGuQOFKfkBO-LZY9wTKyB7Y",
+  authDomain: "trip-ledger-98e92.firebaseapp.com",
+  projectId: "trip-ledger-98e92",
+  storageBucket: "trip-ledger-98e92.firebasestorage.app",
+  messagingSenderId: "713321965623",
+  appId: "1:713321965623:web:6a248f27fb82f6ea8d37b2",
+};
+const firebaseApp = initializeApp(firebaseConfig);
+// experimentalAutoDetectLongPolling avoids a known Firestore failure mode:
+// its default streaming connection can hang indefinitely — not error, just
+// never resolve — behind certain corporate networks, proxies, VPNs, or
+// browser extensions. This detects that case and falls back automatically.
+const db = initializeFirestore(firebaseApp, {experimentalAutoDetectLongPolling: true});
+const storage = getStorage(firebaseApp);
+
 /* ============================= Storage helpers ============================= */
 /* Personal (per-device) data uses plain localStorage — this file is meant to be
    opened as a real, standalone page (from Drive, email, wherever), not inside
    the Claude.ai artifact sandbox, so localStorage works normally here. */
-const LS_BACKEND_URL_KEY = 'tripledger.backendUrl';
 const LS_LAST_CURRENCY_KEY = 'tripledger.lastCurrency';
 
 function lsGet(key){
@@ -3043,60 +3075,57 @@ function lsSet(key, value){
   catch(e){ console.error('localStorage set failed', e); return false; }
 }
 
-/* Shared (cross-device) data goes to a Google Apps Script Web App backed by a
-   Google Sheet (+ Drive for photos) that you deploy yourself — see SETUP.md. */
-function getBackendUrl(){ return localStorage.getItem(LS_BACKEND_URL_KEY) || ''; }
-function setBackendUrl(url){ localStorage.setItem(LS_BACKEND_URL_KEY, url.trim()); }
+/* Shared (cross-device) data now lives in Firestore — no per-deployment
+   backend URL to configure anymore, unlike the old Apps Script version.
+   Key routing mirrors the old flat key-value scheme so nothing else in
+   the app needs to change: 'trip:<id>' -> trips/<id>; everything else
+   (e.g. 'trips-index', 'user-directory') -> meta/<key>. */
+function docRefForKey(key){
+  if(key.startsWith('trip:')) return doc(db, 'trips', key.slice('trip:'.length));
+  return doc(db, 'meta', key);
+}
 
-// Every backend call gets a hard timeout — without this, a slow Apps Script
-// cold-start or a flaky connection can leave a fetch() pending forever, with
-// no error and no way to recover except reloading the page.
+// Every Firestore/Storage call gets a hard timeout — without this, a stalled
+// connection (see the long-polling note above) can leave a promise pending
+// forever with no error and no way to recover except reloading the page.
 const BACKEND_TIMEOUT_MS = 20000;
-function fetchWithTimeout(url, opts){
-  const controller = new AbortController();
-  const timer = setTimeout(()=>controller.abort(), BACKEND_TIMEOUT_MS);
-  return fetch(url, {...(opts||{}), signal: controller.signal}).finally(()=>clearTimeout(timer));
+function withTimeout(promise, label){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(()=>reject(new Error(label+' timed out — check your connection and try again')), BACKEND_TIMEOUT_MS)),
+  ]);
 }
 
 async function backendGet(key){
-  const url = getBackendUrl();
-  if(!url) return {ok:false, error:'no-backend'};
   try{
-    const res = await fetchWithTimeout(url + '?action=get&key=' + encodeURIComponent(key), {method:'GET'});
-    const data = await res.json();
-    return data.ok ? {ok:true, value: data.value} : {ok:false, error: data.error||'unknown'};
+    const snap = await withTimeout(getDoc(docRefForKey(key)), 'Loading');
+    return {ok:true, value: snap.exists() ? snap.data() : null};
   }catch(e){
-    return {ok:false, error: e.name==='AbortError' ? 'timed out — the backend took too long to respond' : String(e)};
+    return {ok:false, error: String(e && e.message || e)};
   }
 }
-async function backendSet(key, valueStr){
-  const url = getBackendUrl();
-  if(!url) return {ok:false, error:'no-backend'};
+async function backendSet(key, value){
   try{
-    const res = await fetchWithTimeout(url, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids a CORS preflight against Apps Script
-      body: JSON.stringify({action:'set', key, value: valueStr}),
-    });
-    const data = await res.json();
-    return data.ok ? {ok:true} : {ok:false, error:data.error||'unknown'};
+    // Firestore documents can't hold a bare array/primitive at the top
+    // level — arrays like the trips-index list get wrapped in {list:...}
+    // so they still round-trip through the same storeGet/storeSet shape
+    // every other function already expects.
+    const payload = (value && typeof value==='object' && !Array.isArray(value)) ? value : {list: value};
+    await withTimeout(setDoc(docRefForKey(key), payload), 'Saving');
+    return {ok:true};
   }catch(e){
-    return {ok:false, error: e.name==='AbortError' ? 'timed out — the backend took too long to respond' : String(e)};
+    return {ok:false, error: String(e && e.message || e)};
   }
 }
 async function backendUploadPhoto(tripId, dataUrl){
-  const url = getBackendUrl();
-  if(!url) return {ok:false, error:'no-backend'};
   try{
-    const res = await fetchWithTimeout(url, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'uploadPhoto', tripId, dataUrl}),
-    });
-    const data = await res.json();
-    return data.ok ? {ok:true, url:data.url} : {ok:false, error:data.error||'unknown'};
+    const path = 'trip-photos/' + tripId + '/' + Date.now() + '.jpg';
+    const photoRef = ref(storage, path);
+    await withTimeout(uploadString(photoRef, dataUrl, 'data_url'), 'Photo upload');
+    const url = await getDownloadURL(photoRef);
+    return {ok:true, url};
   }catch(e){
-    return {ok:false, error: e.name==='AbortError' ? 'timed out — the backend took too long to respond' : String(e)};
+    return {ok:false, error: String(e && e.message || e)};
   }
 }
 
@@ -3105,14 +3134,18 @@ async function backendUploadPhoto(tripId, dataUrl){
 async function storeGet(key, shared){
   if(!shared) return lsGet(key);
   const r = await backendGet(key);
-  if(!r.ok){ setBackendStatus(r.error==='no-backend' ? 'unconfigured' : 'error'); return null; }
+  if(!r.ok){ setBackendStatus('error'); return null; }
   setBackendStatus('ok');
-  return (r.value===null || r.value===undefined || r.value==='') ? null : JSON.parse(r.value);
+  if(r.value===null || r.value===undefined) return null;
+  // Unwrap the {list:...} wrapper backendSet applies to arrays/primitives.
+  return (typeof r.value==='object' && !Array.isArray(r.value) && 'list' in r.value && Object.keys(r.value).length===1)
+    ? r.value.list
+    : r.value;
 }
 async function storeSet(key, value, shared){
   if(!shared){ return lsSet(key, value); }
-  const r = await backendSet(key, JSON.stringify(value));
-  setBackendStatus(r.ok ? 'ok' : (r.error==='no-backend' ? 'unconfigured' : 'error'));
+  const r = await backendSet(key, value);
+  setBackendStatus(r.ok ? 'ok' : 'error');
   return r.ok;
 }
 
@@ -3127,9 +3160,8 @@ function renderBackendChip(){
   if(!el) return;
   const map = {
     unknown: {text:'', cls:''},
-    unconfigured: {text:'⚙ Backend not connected', cls:'warn'},
     ok: {text:'● Synced', cls:'ok'},
-    error: {text:'⚠ Sync error — check backend', cls:'warn'},
+    error: {text:'⚠ Sync error — check your connection', cls:'warn'},
   };
   const m = map[backendStatus] || map.unknown;
   el.textContent = m.text;
@@ -3640,23 +3672,16 @@ function swipeToTab(direction){
 
 setupSwipeNav();
 // If someone arrived via a scanned QR code (see the Invite feature), the
-// backend URL is baked into the link as ?b=... — connect automatically so
-// they land straight on the "what's your name?" screen instead of having
-// to paste the backend URL themselves.
+// trip id is baked into the link as ?t=... — connect straight into that
+// trip instead of making them find it on My Plans themselves.
 let pendingJoinTripId = null;
 function autoConnectFromUrlParam(){
   const params = new URLSearchParams(window.location.search);
-  const b = params.get('b');
   const t = params.get('t');
   if(t) pendingJoinTripId = t;
-  if(b && !getBackendUrl()){
-    try{
-      setBackendUrl(decodeURIComponent(b));
-    }catch(e){ /* malformed param — fall through to the normal connect screen */ }
-  }
-  if(b || t){
-    // Clean the URL so the backend link / trip id isn't left sitting in the
-    // address bar / browser history for anyone who looks over a shoulder.
+  if(t){
+    // Clean the URL so the trip id isn't left sitting in the address bar /
+    // browser history for anyone who looks over a shoulder.
     const cleanUrl = window.location.pathname + window.location.hash;
     window.history.replaceState({}, '', cleanUrl);
   }
@@ -3664,11 +3689,6 @@ function autoConnectFromUrlParam(){
 
 async function init(){
   autoConnectFromUrlParam();
-  if(!getBackendUrl()){
-    state.loaded = true;
-    render();
-    return;
-  }
   state.identity = await loadIdentity();
   if(!state.identity){
     state.loaded = true;
@@ -3925,11 +3945,6 @@ async function deleteTripById(id){
 function render(){
   const app = document.getElementById('app');
   if(!state.loaded){ app.innerHTML = ''; return; }
-  if(!getBackendUrl()){
-    app.innerHTML = renderBackendGate();
-    bindBackendGate();
-    return;
-  }
   if(!state.identity){
     app.innerHTML = renderIdentityGate();
     bindIdentityGate();
@@ -3984,6 +3999,12 @@ function mountModals(){
     wrap2.innerHTML = renderImportModal();
     document.body.appendChild(wrap2.firstElementChild);
     bindImportModal(t);
+  }
+  if(state.showMigrateModal && DEVELOPER){
+    const wrapM = document.createElement('div');
+    wrapM.innerHTML = renderMigrateModal();
+    document.body.appendChild(wrapM.firstElementChild);
+    bindMigrateModal();
   }
   if(state.showManageAccessModal && DEVELOPER){
     const wrap3 = document.createElement('div');
@@ -4142,6 +4163,7 @@ function renderPlansScreen(){
       <div class="plans-header-row">
         <h1 class="plans-title">My Plans</h1>
         <div class="plans-header-actions">
+          ${DEVELOPER ? `<button class="btn ghost sm plans-header-btn" id="btnMigrateOldBackend" title="One-time: pull trips from the old Apps Script backend">↺ Migrate old trips</button>` : ''}
           <button class="btn ghost sm plans-header-btn" id="btnImportTrip" title="Import a trip">⬇ Import</button>
           <button class="btn plans-header-btn-solid" id="btnCreateTrip" title="Create a trip">+ Create</button>
         </div>
@@ -4160,6 +4182,8 @@ function renderPlansScreen(){
   `;
 
   bindIdentityBadge();
+  const migrateBtn = document.getElementById('btnMigrateOldBackend');
+  if(migrateBtn) migrateBtn.addEventListener('click', ()=>{ state.showMigrateModal = true; render(); });
   document.getElementById('btnImportTrip').addEventListener('click', ()=>{
     // Import needs a target trip — create a blank one first, then open the importer.
     // createTrip() auto-opens the Invite modal for the new trip; here the user
@@ -4225,11 +4249,6 @@ function renderAccountScreen(){
           <button class="btn ghost sm" id="btnManageAccessFromAccount">👑 Manage Access</button>
         </div>
       ` : ''}
-      <div class="panel-section">
-        <div class="section-head"><h2>Backend</h2></div>
-        <div class="section-note">This is the Google Sheet this ledger reads and writes to.</div>
-        <button class="btn ghost sm" id="btnBackendSettingsFromAccount">⚙ Change backend URL</button>
-      </div>
     </div>
   `;
   bindIdentityBadge();
@@ -4243,37 +4262,25 @@ function renderAccountScreen(){
   if(invGeneral) invGeneral.addEventListener('click', ()=>{ state.inviteForTripId = null; render(); });
   const m = document.getElementById('btnManageAccessFromAccount');
   if(m) m.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
-  const s = document.getElementById('btnBackendSettingsFromAccount');
-  if(s) s.addEventListener('click', ()=>{
-    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
-      localStorage.removeItem(LS_BACKEND_URL_KEY);
-      render();
-    }
-  });
 }
 
 function renderIdentityBadge(inHeader){
   const name = escapeHtml(state.identity.name);
   const role = ACCESS_LEVELS[ACCESS_LEVEL].label;
   const roleBadgeId = 'roleBadge_' + (inHeader?'h':'p');
-  // Access level and backend settings are admin/developer concerns — a
-  // regular member never needs to see app-internal vocabulary like
-  // "Developer" or a way to change the backend, and broadcasting who holds
-  // the highest access level to every viewer is a bad idea given identity
-  // here is just a typed name, not a real login.
-  const showRoleAndSettings = ADMIN || DEVELOPER;
-  const roleBadgeHtml = showRoleAndSettings
+  // Access level is an admin/developer concern — a regular member never
+  // needs to see app-internal vocabulary like "Developer", and broadcasting
+  // who holds the highest access level to every viewer is a bad idea given
+  // identity here is just a typed name, not a real login.
+  const showRole = ADMIN || DEVELOPER;
+  const roleBadgeHtml = showRole
     ? ` &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;${inHeader?'':`color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)`}" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span>`
-    : '';
-  const settingsBtnHtml = showRoleAndSettings
-    ? `<button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px;${inHeader?'background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)':''}">⚙</button>`
     : '';
   if(inHeader){
     return `
       <div class="header-identity">
         <span id="backendChip" class="backend-chip"></span>
         <span>Viewing as <b>${name}</b>${roleBadgeHtml}</span>
-        ${settingsBtnHtml}
         <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
       </div>
     `;
@@ -4282,7 +4289,6 @@ function renderIdentityBadge(inHeader){
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
       <span>Viewing as <b style="color:var(--pine-deep)">${name}</b>${roleBadgeHtml}</span>
-      ${settingsBtnHtml}
       <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
     </div>
   `;
@@ -4296,13 +4302,6 @@ function bindIdentityBadge(){
       el.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
     });
   }
-  const s = document.getElementById('btnBackendSettingsBadge');
-  if(s) s.addEventListener('click', ()=>{
-    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
-      localStorage.removeItem(LS_BACKEND_URL_KEY);
-      render();
-    }
-  });
   renderBackendChip();
 }
 
@@ -5189,53 +5188,6 @@ function findDay(t,id){ return t.days.find(d=>d.id===id); }
 function findItem(t,id){ return t.shopping.find(i=>i.id===id); }
 function findActivity(t,id){ return t.activities.find(a=>a.id===id); }
 
-/* ============================= Backend gate ============================= */
-function renderBackendGate(){
-  return `
-    <div class="modal-backdrop" id="backendBackdrop">
-      <div class="modal">
-        <h2>Connect the ledger</h2>
-        <div class="section-note" style="margin-bottom:16px">
-          This app stores trip data in a Google Sheet you (or your admin) control. Paste the Web App URL
-          from your Apps Script deployment below — see SETUP.md for how to create one (takes about 5 minutes,
-          one-time, free). Everyone using this trip needs the same URL.
-        </div>
-        <div class="field">
-          <label>Apps Script Web App URL</label>
-          <input type="text" id="backendUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
-        </div>
-        <div class="modal-actions">
-          <button class="btn" id="confirmBackendUrl">Connect</button>
-        </div>
-        <div id="backendTestMsg" class="section-note" style="margin-top:10px"></div>
-      </div>
-    </div>
-  `;
-}
-function bindBackendGate(){
-  document.getElementById('confirmBackendUrl').addEventListener('click', async ()=>{
-    const input = document.getElementById('backendUrlInput');
-    const msg = document.getElementById('backendTestMsg');
-    const url = input.value.trim();
-    if(!url || !/^https:\/\/script\.google(\.com|usercontent\.com)\//.test(url)){
-      msg.textContent = 'That doesn\u2019t look like a Google Apps Script Web App URL — double check you copied the "/exec" link.';
-      msg.style.color = 'var(--danger)';
-      return;
-    }
-    msg.textContent = 'Checking connection…';
-    msg.style.color = 'var(--ink-soft)';
-    setBackendUrl(url);
-    const test = await backendGet('trips-index');
-    if(!test.ok){
-      msg.textContent = 'Couldn\u2019t reach that URL (' + test.error + '). Double-check the deployment is set to "Anyone with the link", then try again.';
-      msg.style.color = 'var(--danger)';
-      localStorage.removeItem(LS_BACKEND_URL_KEY);
-      return;
-    }
-    init();
-  });
-}
-
 /* ============================= Identity gate ============================= */
 function renderIdentityGate(){
   return `
@@ -5347,6 +5299,131 @@ function bindNewTripModal(){
     state.showNewTripModal = false;
     state.showManageAccessModal = true;
     render();
+  });
+}
+
+/* ============================= One-time migration from the old backend ============================= */
+// Talks to the OLD Apps Script Web App using its original GET protocol —
+// completely separate from storeGet/storeSet, which now point at Firestore.
+// This exists purely to pull old data across once; nothing else in the app
+// calls this.
+const LEGACY_TIMEOUT_MS = 20000;
+async function legacyBackendGet(baseUrl, key){
+  try{
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(), LEGACY_TIMEOUT_MS);
+    const res = await fetch(baseUrl + '?action=get&key=' + encodeURIComponent(key), {method:'GET', signal:controller.signal})
+      .finally(()=>clearTimeout(timer));
+    const data = await res.json();
+    if(!data.ok) return {ok:false, error: data.error||'unknown'};
+    const value = (data.value===null || data.value===undefined || data.value==='') ? null : JSON.parse(data.value);
+    return {ok:true, value};
+  }catch(e){
+    return {ok:false, error: e.name==='AbortError' ? 'timed out' : String(e && e.message || e)};
+  }
+}
+
+function renderMigrateModal(){
+  return `
+    <div class="modal-backdrop" id="migrateBackdrop">
+      <div class="modal" style="max-width:560px">
+        <h2>Migrate from old backend</h2>
+        <div class="section-note" style="margin-bottom:16px">
+          One-time pull of every trip and the user directory from your old Google Apps Script backend into
+          Firestore. Safe to run more than once — trips already in Firestore are left alone, and old trips
+          are only added if they're not already here.
+        </div>
+        <div class="field">
+          <label>Old Apps Script Web App URL</label>
+          <input type="text" id="migrateUrlInput" placeholder="https://script.google.com/macros/s/.../exec"
+            value="https://script.google.com/macros/s/AKfycby70rzU-Q7D8Rz9Se11MKREkwAj0UJRxnIl0pTGFj6k-0iV63iO70hqduw8_6P2Xa-f/exec">
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost sm" id="cancelMigrate">Close</button>
+          <button class="btn" id="confirmMigrate">Migrate now</button>
+        </div>
+        <div id="migrateStatus" class="section-note" style="margin-top:14px; white-space:pre-line"></div>
+      </div>
+    </div>
+  `;
+}
+function bindMigrateModal(){
+  const backdrop = document.getElementById('migrateBackdrop');
+  let didMigrate = false;
+  const close = ()=>{ state.showMigrateModal=false; if(didMigrate){ loadTripsAndTrip(); } else { render(); } };
+  document.getElementById('cancelMigrate').addEventListener('click', close);
+  backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) close(); });
+
+  document.getElementById('confirmMigrate').addEventListener('click', async ()=>{
+    const url = document.getElementById('migrateUrlInput').value.trim();
+    const statusEl = document.getElementById('migrateStatus');
+    const btn = document.getElementById('confirmMigrate');
+    if(!url){ statusEl.textContent = 'Paste the old backend URL first.'; statusEl.style.color = 'var(--danger)'; return; }
+    btn.disabled = true;
+    statusEl.style.color = 'var(--ink-soft)';
+    statusEl.textContent = 'Fetching trip list from the old backend…';
+
+    const idxResult = await legacyBackendGet(url, 'trips-index');
+    if(!idxResult.ok){
+      statusEl.textContent = 'Couldn\u2019t reach the old backend (' + idxResult.error + '). Double-check the URL and that the deployment is still live.';
+      statusEl.style.color = 'var(--danger)';
+      btn.disabled = false;
+      return;
+    }
+    const oldIndex = idxResult.value || [];
+    if(!oldIndex.length){
+      statusEl.textContent = 'Connected, but the old backend has no trips-index — nothing to migrate.';
+      btn.disabled = false;
+      return;
+    }
+
+    // Only migrate trips not already present in Firestore, by id — safe to
+    // re-run this without duplicating or overwriting anything already here.
+    const currentIndex = (await storeGet('trips-index', true)) || [];
+    const currentIds = new Set(currentIndex.map(ix=>ix.id));
+    const toMigrate = oldIndex.filter(ix=>!currentIds.has(ix.id));
+
+    const migratedNames = [];
+    const failed = [];
+    for(let i=0;i<toMigrate.length;i++){
+      const ix = toMigrate[i];
+      statusEl.textContent = `Migrating trip ${i+1} of ${toMigrate.length}: "${ix.name}"…`;
+      const tripResult = await legacyBackendGet(url, 'trip:'+ix.id);
+      if(!tripResult.ok || !tripResult.value){ failed.push(ix.name+' ('+(tripResult.error||'empty')+')'); continue; }
+      const trip = ensureTripShape(tripResult.value);
+      const ok = await storeSet('trip:'+trip.id, trip, true);
+      if(ok){ migratedNames.push(trip.name); } else { failed.push(trip.name+' (write failed)'); }
+    }
+
+    // Rebuild the index from whatever's now actually in Firestore, rather
+    // than just appending — avoids ever drifting out of sync with reality.
+    const newIndexEntries = toMigrate
+      .filter(ix=>migratedNames.includes(ix.name))
+      .map(ix=>({id:ix.id, name:ix.name, type:ix.type, createdAt:ix.createdAt}));
+    await storeSet('trips-index', [...currentIndex, ...newIndexEntries], true);
+
+    // User directory: merge by name, case-insensitive — keep any entry
+    // already in Firestore, only add old ones that aren't already present.
+    statusEl.textContent = 'Merging the user directory…';
+    const dirResult = await legacyBackendGet(url, 'user-directory');
+    if(dirResult.ok && Array.isArray(dirResult.value)){
+      const currentDir = (await storeGet('user-directory', true)) || [];
+      const currentNames = new Set(currentDir.map(u=>String(u.name||'').trim().toLowerCase()));
+      const newPeople = dirResult.value.filter(u=>!currentNames.has(String(u.name||'').trim().toLowerCase()));
+      if(newPeople.length){
+        await storeSet('user-directory', [...currentDir, ...newPeople], true);
+      }
+    }
+
+    state.tripsIndex = []; // force a real reload from Firestore next time My Plans loads, not a stale cache
+    didMigrate = true;
+    let summary = `Done. Migrated ${migratedNames.length} trip${migratedNames.length===1?'':'s'}`;
+    if(migratedNames.length) summary += ':\n' + migratedNames.map(n=>'• '+n).join('\n');
+    if(failed.length) summary += `\n\n${failed.length} failed:\n` + failed.map(n=>'• '+n).join('\n');
+    if(!toMigrate.length) summary = 'Everything from the old backend is already in Firestore — nothing new to migrate.';
+    statusEl.textContent = summary + '\n\n(Click Close to return to My Plans with the migrated trips visible.)';
+    statusEl.style.color = failed.length ? 'var(--danger)' : 'var(--pine-deep)';
+    btn.disabled = false;
   });
 }
 
@@ -5523,11 +5600,8 @@ function bindManageAccessModal(){
 
 /* ============================= Invite (QR code / link) ============================= */
 function buildInviteUrl(tripId){
-  const backend = getBackendUrl();
   const base = window.location.origin + window.location.pathname;
-  let url = base + '?b=' + encodeURIComponent(backend);
-  if(tripId) url += '&t=' + encodeURIComponent(tripId);
-  return url;
+  return tripId ? (base + '?t=' + encodeURIComponent(tripId)) : base;
 }
 function renderInviteModal(){
   const tripId = state.inviteForTripId || null;
