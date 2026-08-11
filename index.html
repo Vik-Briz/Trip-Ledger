@@ -3620,6 +3620,18 @@ function touchIndex(){
 // change when this replaced the old free-text name entry. phone is no
 // longer collected at sign-up (real accounts don't need it for identity);
 // it stays editable per-person in the Members table as before.
+// The verification email's "Continue" link needs to carry the pending
+// trip id itself — localStorage does NOT reliably survive the jump to a
+// different browser context, which is exactly what happens when someone
+// taps the email link inside Gmail's (or Outlook's, etc.) in-app browser
+// instead of their regular one. Baking it into the link itself fixes that
+// at the source instead of hoping storage carries across.
+function verificationActionCodeSettings(){
+  const pending = getPendingJoinTripId();
+  const base = window.location.origin + window.location.pathname;
+  return { url: pending ? (base + '?t=' + encodeURIComponent(pending)) : base };
+}
+
 function identityFromAuthUser(user){
   return {name: user.displayName || '', phone: '', email: user.email || '', uid: user.uid};
 }
@@ -4208,6 +4220,14 @@ function renderPlansScreen(){
           <div class="empty-title">No trips yet</div>
           Start one and invite the group — costs, meals, and the itinerary all live in one place.
           <div><button class="btn plans-header-btn-solid" id="btnCreateTripEmpty" style="margin-top:14px">+ Create your first trip</button></div>
+          <div class="section-note" style="margin-top:18px">
+            Were you sent an invite link but landed here instead? Paste it below to join that trip.
+          </div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap">
+            <input type="text" id="manualJoinInput" placeholder="Paste your invite link here" style="max-width:320px;flex:1">
+            <button class="btn ghost sm" id="btnManualJoin">Join trip</button>
+          </div>
+          <div id="manualJoinStatus" class="section-note" style="margin-top:8px"></div>
         </div>
       `}
     </div>
@@ -4225,6 +4245,23 @@ function renderPlansScreen(){
   document.getElementById('btnCreateTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
   const btnCreateTripEmpty = document.getElementById('btnCreateTripEmpty');
   if(btnCreateTripEmpty) btnCreateTripEmpty.addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+  const btnManualJoin = document.getElementById('btnManualJoin');
+  if(btnManualJoin) btnManualJoin.addEventListener('click', async ()=>{
+    const raw = (document.getElementById('manualJoinInput').value||'').trim();
+    const statusEl = document.getElementById('manualJoinStatus');
+    if(!raw){ statusEl.textContent = 'Paste the invite link (or just the trip id) first.'; statusEl.style.color = 'var(--danger)'; return; }
+    // Accept either a full invite URL (extract ?t=...) or a bare trip id.
+    let tripId = raw;
+    try{
+      const parsed = new URL(raw);
+      const t = parsed.searchParams.get('t');
+      if(t) tripId = t;
+    }catch(e){ /* not a URL — treat the whole input as a bare trip id */ }
+    setPendingJoinTripId(tripId);
+    statusEl.textContent = 'Joining…';
+    statusEl.style.color = 'var(--ink-soft)';
+    await loadTripsAndTrip();
+  });
 
   document.querySelectorAll('.plan-card').forEach(card=>{
     const id = card.dataset.plan;
@@ -5297,7 +5334,7 @@ function bindIdentityGate(){
       if(isSignup){
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(cred.user, {displayName: name});
-        await sendEmailVerification(cred.user);
+        await sendEmailVerification(cred.user, verificationActionCodeSettings());
         // onAuthStateChanged fires from the sign-up itself — it'll see an
         // unverified user and render() will switch to the verify-email gate.
       } else {
@@ -5373,7 +5410,7 @@ function bindVerifyEmailGate(){
   document.getElementById('verifyResend').addEventListener('click', async (e)=>{
     e.preventDefault();
     try{
-      await sendEmailVerification(auth.currentUser);
+      await sendEmailVerification(auth.currentUser, verificationActionCodeSettings());
       setStatus('Sent — check your inbox (and spam folder).', false);
     }catch(e){
       setStatus(authErrorMessage(e), true);
@@ -5779,8 +5816,8 @@ function renderInviteModal(){
         <div class="section-note" style="margin-bottom:14px">
           Scan this with a phone camera, or share the link below in a text or WhatsApp message.
           ${trip
-            ? 'It opens the app, connects automatically, and adds them straight into this trip — no setup needed, they just type their name.'
-            : 'It opens the app and connects automatically — no setup needed, they just type their name. This general link doesn\u2019t add them to any specific trip; from a trip\u2019s People tab you can invite straight into that trip instead.'}
+            ? 'It opens the app and, once they create an account (or sign in) and verify their email, adds them straight into this trip.'
+            : 'It opens the app for them to create an account or sign in. This general link doesn\u2019t add them to any specific trip; from a trip\u2019s People tab you can invite straight into that trip instead.'}
         </div>
         <div id="inviteQr" style="display:flex; justify-content:center; margin:14px 0;"></div>
         <div class="field">
