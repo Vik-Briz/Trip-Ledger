@@ -143,6 +143,8 @@
   .stat-chip.sm span{font-size:8px; color:var(--ink-soft);}
   .stat-chip.sm.ok{background:rgba(70,130,100,0.14); border-color:#a9c6b8; color:var(--pine-deep);}
   .stat-chip.sm.warn{background:rgba(193,98,43,0.14); border-color:#e0b28c; color:var(--rust);}
+  .role-badge-clickable{ transition:opacity .1s; }
+  .role-badge-clickable:hover{ opacity:0.75; }
 
   .switcher{
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
@@ -326,7 +328,7 @@
     font-family:'IBM Plex Mono',monospace; background:#fff; color:var(--ink);
   }
   .trip-date-range{
-    font-size:12px; color:var(--pine-deep); font-weight:600; margin-left:auto;
+    font-size:12px; color:#F4EFE0; font-weight:600; margin-left:8px; opacity:0.9;
   }
   .balance-forward-row{
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -387,6 +389,83 @@
   .activity-notes{
     border:1px solid var(--line); border-radius:4px; padding:5px 8px;
     font-size:11.5px; font-family:'Work Sans',sans-serif; background:#fff; resize:vertical; min-height:28px;
+  }
+
+  /* ---------- Itinerary timeline (TripIt-style) ---------- */
+  .itinerary-timeline{ display:flex; flex-direction:column; gap:22px; }
+  .itin-date-header{
+    background:var(--paper-dark); padding:8px 14px; font-size:11.5px; font-weight:700;
+    letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); border-radius:6px; margin-bottom:2px;
+  }
+  .itin-rows-wrap{ position:relative; }
+  .itin-rows-wrap::before{
+    content:''; position:absolute; left:114px; top:22px; bottom:22px; width:2px; background:var(--line); z-index:0;
+  }
+  .itin-row{ display:flex; align-items:flex-start; padding:14px 0; position:relative; }
+  .itin-row + .itin-row{ border-top:1px dashed var(--line-soft); }
+  .itin-time-col{
+    width:92px; flex:none; display:flex; flex-direction:column; align-items:flex-end;
+    padding-right:8px; padding-top:6px;
+  }
+  .itin-time-input{
+    border:none; background:transparent; font-weight:700; font-size:14px; text-align:right;
+    font-family:'IBM Plex Mono',monospace; color:var(--ink); padding:1px 0; width:100%; min-width:78px;
+  }
+  .itin-endtime-input{
+    border:none; background:transparent; font-size:10.5px; text-align:right; color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace; padding:0; width:100%; min-width:78px;
+  }
+  /* Native time inputs draw their own clock icon inside the field — with the
+     big circular type icon already sitting right next to it, that icon is
+     redundant, and it was crowding the actual time digits in a narrow
+     column, cutting them off. Hiding it frees up the space instead. */
+  .itin-time-input::-webkit-calendar-picker-indicator,
+  .itin-endtime-input::-webkit-calendar-picker-indicator{
+    display:none; -webkit-appearance:none;
+  }
+  .itin-line-col{
+    width:44px; flex:none; display:flex; justify-content:center; position:relative; z-index:1; padding-top:4px;
+  }
+  .itin-icon-badge{
+    width:36px; height:36px; border-radius:50%; background:var(--pine-tint); border:2px solid var(--pine);
+    display:flex; align-items:center; justify-content:center; position:relative; cursor:pointer;
+  }
+  .itin-icon-badge-emoji{ font-size:15px; pointer-events:none; }
+  .itin-type-select{ position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; border:none; }
+  .itin-detail-col{ flex:1; min-width:0; padding:4px 0 0 12px; }
+  .itin-detail-top-row{ display:flex; align-items:center; gap:8px; }
+  .itin-title-input{
+    flex:1; min-width:0; border:none; background:transparent; font-weight:600; font-size:14.5px;
+    color:var(--ink); font-family:'Work Sans',sans-serif; padding:2px 0;
+  }
+  .itin-loc-row{ display:flex; align-items:center; gap:6px; margin-top:2px; }
+  .itin-loc-input{
+    flex:1; min-width:0; border:none; background:transparent; font-size:12px; color:var(--ink-soft);
+    font-family:'Work Sans',sans-serif; padding:1px 0;
+  }
+  .itin-notes-input{
+    display:block; width:100%; border:none; background:transparent; font-size:11.5px; color:var(--ink-soft);
+    font-family:'Work Sans',sans-serif; resize:vertical; min-height:20px; padding:3px 0 0; margin-top:2px;
+  }
+  .place-suggestions{
+    position:absolute; top:calc(100% + 2px); left:0; right:0; background:#fff; border:1px solid var(--line);
+    border-radius:6px; box-shadow:var(--shadow); z-index:10; max-height:180px; overflow-y:auto;
+  }
+  .place-suggestion-item{
+    padding:8px 10px; font-size:12px; color:var(--ink); cursor:pointer; border-bottom:1px solid var(--line-soft);
+    line-height:1.3;
+  }
+  .place-suggestion-item:last-child{ border-bottom:none; }
+  .place-suggestion-item:hover{ background:var(--paper-dark); }
+  .itin-time-input:focus, .itin-endtime-input:focus, .itin-title-input:focus, .itin-loc-input:focus, .itin-notes-input:focus{
+    outline:none; background:var(--paper-dark); border-radius:3px;
+  }
+  .itin-title-input::placeholder, .itin-loc-input::placeholder, .itin-notes-input::placeholder{ color:var(--ink-soft); opacity:0.7; }
+  @media (max-width:640px), (max-height:520px) and (orientation:landscape){
+    .itin-time-col{ width:74px; }
+    .itin-time-input, .itin-endtime-input{ min-width:62px; font-size:12.5px; }
+    .itin-rows-wrap::before{ left:96px; }
+    .itin-title-input{ font-size:13.5px; }
   }
 
   .modal-backdrop{
@@ -511,6 +590,7 @@
 
   /* ---------- My Plans / Account / trip-header navigation ---------- */
   .back-to-plans-row{margin-bottom:8px;}
+  .account-title-row{ width:100%; } /* forces this whole block onto its own row within .tag's flex-wrap, so it can never overlap the identity badge beside it */
   .back-to-plans-row .loc-add{color:#F4EFE0; opacity:0.85; font-size:12px;}
   .back-to-plans-row .loc-add:hover{opacity:1; text-decoration:underline;}
   .header-date-input{
@@ -560,6 +640,41 @@
   .plan-card-dates{font-size:12px; color:var(--ink); margin-top:6px;}
   .plan-card-nodate{font-style:italic; color:var(--ink-soft);}
   .plan-card-stats{display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;}
+
+  /* "+ Create" as a plain header button — unlike the old dropdown-menu, a
+     button has no overflowing content of its own, so it isn't at risk of
+     being clipped by the header's overflow rules the way that was. */
+  .plans-header-btn-solid{
+    background:var(--rust); color:#F4EFE0; border-color:var(--rust); font-size:12px; padding:6px 12px;
+  }
+  .plans-header-btn-solid:hover{ background:#a4501f; }
+  /* Maintenance Mode — deliberately loud so it can never be silently left on */
+  .maintenance-banner{
+    position:sticky; top:0; z-index:50; background:var(--rust); color:#F4EFE0;
+    text-align:center; padding:8px 14px; font-size:12.5px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap;
+  }
+  .maintenance-banner button{
+    background:rgba(255,255,255,0.2); color:#F4EFE0; border:1px solid rgba(255,255,255,0.5);
+    border-radius:4px; padding:3px 10px; font-size:11px; cursor:pointer;
+  }
+  .maintenance-banner button:hover{ background:rgba(255,255,255,0.32); }
+  .maintenance-toggle-box{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    margin-top:16px; padding-top:16px; border-top:1px dashed var(--line);
+  }
+  .maintenance-toggle-title{font-family:'Oswald',sans-serif; font-weight:600; font-size:14px; color:var(--pine-deep);}
+  .maintenance-switch{ position:relative; display:inline-block; width:44px; height:24px; flex:none; }
+  .maintenance-switch input{ opacity:0; width:0; height:0; }
+  .maintenance-switch-track{
+    position:absolute; cursor:pointer; inset:0; background:var(--line); border-radius:24px; transition:.15s;
+  }
+  .maintenance-switch-track::before{
+    content:""; position:absolute; height:18px; width:18px; left:3px; bottom:3px;
+    background:#fff; border-radius:50%; transition:.15s;
+  }
+  .maintenance-switch input:checked + .maintenance-switch-track{ background:var(--rust); }
+  .maintenance-switch input:checked + .maintenance-switch-track::before{ transform:translateX(20px); }
 </style>
 </head>
 <body>
@@ -3023,6 +3138,8 @@ const state = {
   showImportModal: false,
   showManageAccessModal: false,
   showInviteModal: false,
+  inviteForTripId: null, // when set, Invite generates a link that auto-joins that specific trip
+  developerMaintenanceMode: false, // explicit, off-by-default opt-in — Developer troubleshooting any trip without being personally added, always OFF at the start of a session
   loaded: false,
   identity: null,     // {name, phone}
   userDirectory: [],  // [{name, level: 'developer'|'member'}] — GLOBAL, shared across all trips. Admin is not stored here — see each trip's people[].isTripAdmin.
@@ -3046,12 +3163,15 @@ function accessLevelForName(name){
 function computeGlobalLevel(){
   ACCESS_LEVEL = state.identity ? accessLevelForName(state.identity.name) : 'member';
   DEVELOPER = ACCESS_LEVEL === 'developer';
-  ADMIN = DEVELOPER; // no trip open yet — this gets recomputed per-trip in openTrip()
+  ADMIN = false; // no trip open yet — Developer no longer auto-grants trip access, see canEditTrip()
 }
-// Can the current identity edit this specific trip? Developer always can;
-// otherwise only someone flagged isTripAdmin in THAT trip's People list.
+// Can the current identity edit this specific trip? By default: only if
+// personally flagged isTripAdmin on THAT trip's People list — same
+// requirement for everyone, Developer included (no automatic bypass).
+// The ONE exception is Developer's explicit, visible Maintenance Mode
+// toggle — off by default every session, only for deliberate troubleshooting.
 function canEditTrip(trip){
-  if(DEVELOPER) return true;
+  if(DEVELOPER && state.developerMaintenanceMode) return true;
   if(!trip || !state.identity) return false;
   const myName = String(state.identity.name||'').trim().toLowerCase();
   return trip.people.some(p=>String(p.name||'').trim().toLowerCase()===myName && p.isTripAdmin);
@@ -3083,11 +3203,14 @@ async function loadUserDirectory(){
     state.userDirectory = DEFAULT_USER_DIRECTORY.map(u=>({...u}));
     await storeSet('user-directory', state.userDirectory, true);
   }
-  // Remember who was globally 'admin' under the OLD model, before we migrate
-  // those entries away — existing trips use this once to grandfather them in
-  // as THAT trip's admin, so nobody already using the app loses edit access.
+  // Remember who had automatic edit access under the OLD model — both
+  // legacy global 'admin' AND 'developer' (Developer used to auto-edit every
+  // trip; that stopped being true once we made it require being personally
+  // added, same as anyone). Existing trips use this once to grandfather
+  // these people in as THAT trip's admin, so nobody already using the app
+  // loses edit access to a trip they were already editing.
   state.legacyGlobalAdmins = state.userDirectory
-    .filter(u=>u.level==='admin')
+    .filter(u=>u.level==='admin' || u.level==='developer')
     .map(u=>String(u.name||'').trim().toLowerCase());
   let migrated = false;
   state.userDirectory.forEach(u=>{ if(u.level==='admin'){ u.level='member'; migrated=true; } });
@@ -3136,10 +3259,28 @@ function newTrip(name, type){
 
 const ACTIVITY_TYPES = {
   flight:        {icon:'✈️', label:'Flight'},
-  accommodation: {icon:'🏨', label:'Accommodation'},
-  activity:      {icon:'🎣', label:'Activity'},
+  accommodation: {icon:'🏨', label:'Hotel'},
+  house:         {icon:'🏠', label:'House'},
+  camping:       {icon:'⛺', label:'Camping'},
+  activity:      {icon:'🎣', label:'Fishing'},
+  golf:          {icon:'⛳', label:'Golfing'},
+  drivingrange:  {icon:'🏌️', label:'Driving Range'},
+  shooting:      {icon:'🎯', label:'Shooting'},
+  swimming:      {icon:'🏊', label:'Swimming'},
+  kayak:         {icon:'🛶', label:'Kayak'},
+  jetski:        {icon:'🚤', label:'Jet Ski'},
+  snorkelling:   {icon:'🐠', label:'Snorkelling'},
+  diving:        {icon:'🤿', label:'Diving'},
+  hiking:        {icon:'🥾', label:'Hiking'},
+  ski:           {icon:'⛷️', label:'Ski'},
+  forest:        {icon:'🌲', label:'Forest'},
+  temple:        {icon:'🛕', label:'Temple'},
+  cooking:       {icon:'🍳', label:'Cooking'},
   meal:          {icon:'🍽️', label:'Meal'},
-  transport:     {icon:'🚗', label:'Transport'},
+  transport:     {icon:'🚗', label:'Driving'},
+  train:         {icon:'🚆', label:'Train'},
+  ship:          {icon:'🚢', label:'Ship'},
+  barge:         {icon:'⛴️', label:'Barge'},
   other:         {icon:'📌', label:'Other'},
 };
 
@@ -3173,15 +3314,22 @@ function ensureTripShape(t){
     if(a.order===undefined) a.order = i;
   });
   if(!t.balanceForward) t.balanceForward = {label:'Balance FW', amount:0};
-  t.people.forEach(p=>{
-    if(p.isTripAdmin === undefined){
-      // Grandfather in anyone who was a global admin under the old model —
-      // per-trip admin replaces it, but nobody already using the app should
-      // silently lose edit access to a trip they were already editing.
+  // One-time per-trip migration: make sure EVERY legacy admin/developer still
+  // listed in this trip's People actually has isTripAdmin:true, correcting
+  // both never-set (undefined) and incorrectly-saved (false) cases — not
+  // just as a fallback when NOBODY has admin, since one correctly-migrated
+  // person on a trip was masking others who weren't. Runs once per trip
+  // (marked and persisted below) so it can never undo a later deliberate
+  // demotion — after this migration, isTripAdmin is fully self-governed.
+  if(!t._legacyAdminMigrated){
+    t.people.forEach(p=>{
       const key = String(p.name||'').trim().toLowerCase();
-      p.isTripAdmin = (state.legacyGlobalAdmins||[]).includes(key);
-    }
-  });
+      if((state.legacyGlobalAdmins||[]).includes(key)) p.isTripAdmin = true;
+      else if(p.isTripAdmin === undefined) p.isTripAdmin = false;
+    });
+    t._legacyAdminMigrated = true;
+    t._needsMigrationSave = true; // loadTripsAndTrip() persists this exactly once
+  }
   return t;
 }
 
@@ -3407,17 +3555,22 @@ setupSwipeNav();
 // backend URL is baked into the link as ?b=... — connect automatically so
 // they land straight on the "what's your name?" screen instead of having
 // to paste the backend URL themselves.
+let pendingJoinTripId = null;
 function autoConnectFromUrlParam(){
   const params = new URLSearchParams(window.location.search);
   const b = params.get('b');
+  const t = params.get('t');
+  if(t) pendingJoinTripId = t;
   if(b && !getBackendUrl()){
     try{
       setBackendUrl(decodeURIComponent(b));
-      // Clean the URL so the backend link isn't left sitting in the
-      // address bar / browser history for anyone who looks over a shoulder.
-      const cleanUrl = window.location.pathname + window.location.hash;
-      window.history.replaceState({}, '', cleanUrl);
     }catch(e){ /* malformed param — fall through to the normal connect screen */ }
+  }
+  if(b || t){
+    // Clean the URL so the backend link / trip id isn't left sitting in the
+    // address bar / browser history for anyone who looks over a shoulder.
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, '', cleanUrl);
   }
 }
 
@@ -3453,11 +3606,39 @@ async function loadTripsAndTrip(){
     if(fullTrips[i]) state.plansCache[ix.id] = ensureTripShape(fullTrips[i]);
   });
 
-  // Members only see trips they're actually part of (their name appears in
-  // that trip's People list) — Admins/Developers see everything, since they
-  // manage the whole ledger. Filtering here (not just at display time) means
-  // a Member's app never even holds data for trips they're not part of.
-  if(!ADMIN){
+  // Persist the one-time legacy-admin migration for any trip that just got
+  // corrected — without this, the fix would re-derive correctly every load
+  // but never actually stick, and would keep silently overriding any future
+  // deliberate demotion since it'd never be marked as already-migrated.
+  const needingSave = Object.values(state.plansCache).filter(t=>t._needsMigrationSave);
+  if(needingSave.length){
+    await Promise.all(needingSave.map(t=>{
+      delete t._needsMigrationSave;
+      return storeSet('trip:'+t.id, t, true);
+    }));
+  }
+
+  // Arrived via a trip-specific Invite link — join that trip as a Member
+  // (if not already in it) BEFORE the membership filter below runs, so it's
+  // guaranteed to show up instead of landing on an empty "no trips" screen.
+  let justJoinedTripId = null;
+  if(pendingJoinTripId && state.plansCache[pendingJoinTripId]){
+    const t = state.plansCache[pendingJoinTripId];
+    const myName = String(state.identity.name||'').trim().toLowerCase();
+    const already = t.people.some(p=>String(p.name||'').trim().toLowerCase()===myName);
+    if(!already){
+      t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
+      await storeSet('trip:'+pendingJoinTripId, t, true);
+    }
+    justJoinedTripId = pendingJoinTripId;
+  }
+  pendingJoinTripId = null;
+
+  // Everyone — Developer included — only sees trips they're actually part of
+  // (their name appears in that trip's People list), UNLESS Developer has
+  // deliberately switched on Maintenance Mode for troubleshooting. That's an
+  // explicit, visible, off-by-default opt-in — not a silent bypass.
+  if(!(DEVELOPER && state.developerMaintenanceMode)){
     const myName = String(state.identity.name||'').trim().toLowerCase();
     state.tripsIndex = state.tripsIndex.filter(ix=>{
       const t = state.plansCache[ix.id];
@@ -3470,6 +3651,11 @@ async function loadTripsAndTrip(){
   state.screen = 'plans';
   state.trip = null;
   state.loaded = true;
+
+  if(justJoinedTripId && state.plansCache[justJoinedTripId]){
+    openTrip(justJoinedTripId); // jump straight into the trip they were invited to, skip My Plans
+    return;
+  }
   render();
 }
 
@@ -3556,6 +3742,11 @@ async function createTrip(name, type, startDate, numDays){
     t.days = Array.from({length:n}, (_,i)=>({id:uid(), label:'Day '+(i+1), breakfast:'', lunch:'', dinner:''}));
     // The creator is automatically added as a member AND this trip's admin.
     t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
+    // Brand new trip, created entirely under the per-trip-admin system —
+    // never subject to the legacy grandfather-in migration (that's only for
+    // trips that predate this system; applying it here would silently
+    // override any deliberate admin decisions made on this trip later).
+    t._legacyAdminMigrated = true;
     state.tripsIndex.push({id:t.id, name:t.name, type:t.type, createdAt:t.createdAt});
     state.plansCache[t.id] = t;
     await Promise.all([
@@ -3563,6 +3754,8 @@ async function createTrip(name, type, startDate, numDays){
       storeSet('trip:'+t.id, t, true),
     ]);
     state.showNewTripModal = false;
+    state.inviteForTripId = t.id;
+    state.showInviteModal = true; // land inside the new trip with its invite already up — nothing extra to go find
     openTrip(t.id);
   } finally {
     actionInProgress = false;
@@ -3613,6 +3806,7 @@ async function duplicateTripById(id){
       catchLogEnabled: !!src.catchLogEnabled,                          // the on/off preference carries over, the data doesn't
       activities: src.activities.map(a=>({...a, id:uid(), dayId: dayIdMap[a.dayId]||'', location:{...(a.location||{name:'',mapsUrl:''})}})),
       balanceForward: {label:'Balance FW', amount:0}, // rollover credit is specific to the trip it came from — starts fresh
+      _legacyAdminMigrated: true, // explicit admin assignment above — never subject to the legacy grandfather-in migration
     };
 
     state.tripsIndex.push({id:newTripObj.id, name:newTripObj.name, type:newTripObj.type, createdAt:newTripObj.createdAt});
@@ -3661,9 +3855,34 @@ function render(){
     renderPlansScreen();
   }
   mountModals();
+  renderMaintenanceBanner();
+}
+
+function renderMaintenanceBanner(){
+  const existing = document.getElementById('maintenanceBanner');
+  if(existing) existing.remove();
+  if(DEVELOPER && state.developerMaintenanceMode){
+    const banner = document.createElement('div');
+    banner.id = 'maintenanceBanner';
+    banner.className = 'maintenance-banner';
+    banner.innerHTML = `🔧 Maintenance Mode is ON — you can see and edit every trip. <button id="btnEndMaintenance">Turn off</button>`;
+    document.body.insertBefore(banner, document.body.firstChild);
+    document.getElementById('btnEndMaintenance').addEventListener('click', ()=>{
+      state.developerMaintenanceMode = false;
+      loadTripsAndTrip();
+    });
+  }
 }
 
 function mountModals(){
+  // Always clear out any previously-mounted modal first. Modals live outside
+  // #app (appended directly to body) so a normal render() never touches
+  // them — without this, a stale one from an earlier action can be left
+  // sitting in the DOM invisibly. Since a modal backdrop covers the entire
+  // screen, a leftover one silently eats every click from then on, which
+  // looks exactly like the app being frozen even though it's fine underneath.
+  document.querySelectorAll('.modal-backdrop').forEach(el=>el.remove());
+
   const t = state.trip;
   if(state.showNewTripModal && state.identity){
     const wrap = document.createElement('div');
@@ -3704,6 +3923,7 @@ function renderTripScreen(){
       ${renderIdentityBadge(true)}
       <div class="back-to-plans-row">
         <span class="loc-add" id="btnBackToPlans">← My Plans</span>
+        ${ADMIN ? `<span class="loc-add" id="btnTripAccount" style="margin-left:14px">👤 Account</span>` : ''}
       </div>
       <div class="tag-left">
         <div class="cover-thumb" id="coverThumb" title="${ADMIN?'Click to add/change photo':''}" style="${ADMIN?'cursor:pointer':''}">
@@ -3749,6 +3969,12 @@ function renderTripScreen(){
 
   document.getElementById('btnBackToPlans').addEventListener('click', backToPlans);
   if(ADMIN){
+    const tripAccountLink = document.getElementById('btnTripAccount');
+    if(tripAccountLink) tripAccountLink.addEventListener('click', ()=>{
+      state.inviteForTripId = t.id; // Account's Invite button opens already scoped to this trip
+      state.screen = 'account';
+      render();
+    });
     const nameEl = document.getElementById('tripNameDisplay');
     nameEl.addEventListener('click', ()=>{
       const val = prompt('Trip name', t.name);
@@ -3794,6 +4020,7 @@ function renderPlansScreen(){
             <div class="plan-card-title">${escapeHtml(t.name)}</div>
             ${editable ? `
               <div class="plan-card-actions">
+                <button class="plan-card-icon-btn plan-account-btn" title="Account — invite &amp; members for this trip">👤</button>
                 <button class="plan-card-icon-btn plan-duplicate-btn" title="Duplicate this trip">⧉</button>
                 <button class="plan-card-icon-btn plan-delete-btn" title="Delete this trip">🗑</button>
               </div>
@@ -3817,49 +4044,41 @@ function renderPlansScreen(){
       <div class="plans-header-row">
         <h1 class="plans-title">My Plans</h1>
         <div class="plans-header-actions">
-          <button class="btn ghost sm plans-header-btn" id="btnAccountNav" title="Account">👤 Account</button>
-          <div class="menu-wrap">
-            <button class="btn ghost sm plans-header-btn" id="btnPlansMenu" title="More">⋯</button>
-            <div class="dropdown-menu" id="plansMenuDropdown" hidden>
-              <button id="menuCreateTrip">+ Create a Trip</button>
-              <button id="menuImportTrip">⬇ Import a Trip</button>
-            </div>
-          </div>
+          <button class="btn ghost sm plans-header-btn" id="btnImportTrip" title="Import a trip">⬇ Import</button>
+          <button class="btn plans-header-btn-solid" id="btnCreateTrip" title="Create a trip">+ Create</button>
         </div>
       </div>
     </div>
     <div class="plans-list">
       ${cards || `
         <div class="empty" style="margin-top:24px">
-          No trips yet.
-          <div style="margin-top:14px"><button class="btn" id="btnCreateFirstTrip">+ Create your first trip</button></div>
+          No trips yet — tap "+ Create" above to make your first one.
         </div>
       `}
     </div>
   `;
 
   bindIdentityBadge();
-  document.getElementById('btnAccountNav').addEventListener('click', ()=>{ state.screen='account'; render(); });
-
-  const menuBtn = document.getElementById('btnPlansMenu');
-  if(menuBtn){
-    const dropdown = document.getElementById('plansMenuDropdown');
-    menuBtn.addEventListener('click', (e)=>{ e.stopPropagation(); dropdown.hidden = !dropdown.hidden; });
-    document.addEventListener('click', ()=>{ dropdown.hidden = true; }, {once:true});
-    document.getElementById('menuCreateTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
-    document.getElementById('menuImportTrip').addEventListener('click', ()=>{
-      // Import needs a target trip — create a blank one first, then open the importer.
-      createTrip('New Trip', 'other', '', 1).then(()=>{ state.showImportModal = true; render(); });
-    });
-  }
-  const firstBtn = document.getElementById('btnCreateFirstTrip');
-  if(firstBtn) firstBtn.addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
+  document.getElementById('btnImportTrip').addEventListener('click', ()=>{
+    // Import needs a target trip — create a blank one first, then open the importer.
+    // createTrip() auto-opens the Invite modal for the new trip; here the user
+    // explicitly asked for Import instead, so that takes over, not both at once.
+    createTrip('New Trip', 'other', '', 1).then(()=>{ state.showInviteModal = false; state.showImportModal = true; render(); });
+  });
+  document.getElementById('btnCreateTrip').addEventListener('click', ()=>{ state.showNewTripModal=true; render(); });
 
   document.querySelectorAll('.plan-card').forEach(card=>{
     const id = card.dataset.plan;
     card.addEventListener('click', (e)=>{
       if(e.target.closest('.plan-card-actions')) return; // icon clicks handled separately below
       openTrip(id);
+    });
+    const acc = card.querySelector('.plan-account-btn');
+    if(acc) acc.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      state.inviteForTripId = id; // Account opens already scoped to this trip — no need to open it first
+      state.screen = 'account';
+      render();
     });
     const dup = card.querySelector('.plan-duplicate-btn');
     if(dup) dup.addEventListener('click', (e)=>{ e.stopPropagation(); duplicateTripById(id); });
@@ -3871,19 +4090,30 @@ function renderPlansScreen(){
 /* ============================= Account ============================= */
 function renderAccountScreen(){
   const app = document.getElementById('app');
+  const scopedTrip = state.inviteForTripId ? state.plansCache[state.inviteForTripId] : null;
+  const cameFromTrip = state.trip; // set if we navigated here from inside a trip, rather than from My Plans
   app.innerHTML = `
     <div class="tag">
       ${renderIdentityBadge(true)}
-      <div class="back-to-plans-row">
-        <span class="loc-add" id="btnBackToPlansFromAccount">← My Plans</span>
+      <div class="account-title-row">
+        <div class="back-to-plans-row">
+          <span class="loc-add" id="btnBackToPlansFromAccount">${cameFromTrip ? `← Back to ${escapeHtml(cameFromTrip.name)}` : '← My Plans'}</span>
+        </div>
+        <h1 class="plans-title">👤 Account</h1>
       </div>
-      <h1 class="plans-title">👤 Account</h1>
     </div>
     <div class="panel">
       <div class="panel-section">
         <div class="section-head"><h2>Invite a member</h2></div>
-        <div class="section-note">Get a QR code or link that connects a new member straight to this ledger.</div>
-        <button class="btn ghost sm" id="btnInviteFromAccount">📱 Invite</button>
+        <div class="section-note">
+          ${scopedTrip
+            ? `Get a QR code or link that connects a new member and adds them straight into <b>${escapeHtml(scopedTrip.name)}</b>.`
+            : `Get a QR code or link that connects a new member to this ledger — this general link doesn't add them to any specific trip.`}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn ghost sm" id="btnInviteFromAccount">📱 Invite${scopedTrip?` to ${escapeHtml(scopedTrip.name)}`:''}</button>
+          ${scopedTrip ? `<button class="btn ghost sm" id="btnInviteGeneral">Use a general link instead</button>` : ''}
+        </div>
       </div>
       ${DEVELOPER ? `
         <div class="panel-section">
@@ -3900,9 +4130,14 @@ function renderAccountScreen(){
     </div>
   `;
   bindIdentityBadge();
-  document.getElementById('btnBackToPlansFromAccount').addEventListener('click', ()=>{ state.screen='plans'; render(); });
+  document.getElementById('btnBackToPlansFromAccount').addEventListener('click', ()=>{
+    state.screen = cameFromTrip ? 'trip' : 'plans';
+    render();
+  });
   const inv = document.getElementById('btnInviteFromAccount');
-  if(inv) inv.addEventListener('click', ()=>{ state.showInviteModal = true; render(); });
+  if(inv) inv.addEventListener('click', ()=>{ state.showInviteModal = true; render(); }); // inviteForTripId is left as-is, whatever brought us here
+  const invGeneral = document.getElementById('btnInviteGeneral');
+  if(invGeneral) invGeneral.addEventListener('click', ()=>{ state.inviteForTripId = null; render(); });
   const m = document.getElementById('btnManageAccessFromAccount');
   if(m) m.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
   const s = document.getElementById('btnBackendSettingsFromAccount');
@@ -3917,11 +4152,13 @@ function renderAccountScreen(){
 function renderIdentityBadge(inHeader){
   const name = escapeHtml(state.identity.name);
   const role = ACCESS_LEVELS[ACCESS_LEVEL].label;
+  const roleBadgeId = 'roleBadge_' + (inHeader?'h':'p');
   if(inHeader){
     return `
       <div class="header-identity">
         <span id="backendChip" class="backend-chip"></span>
-        <span>Viewing as <b>${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;">${role}</span></span>
+        <span>Viewing as <b>${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span></span>
+        <button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">⚙</button>
         <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
       </div>
     `;
@@ -3929,7 +4166,8 @@ function renderIdentityBadge(inHeader){
   return `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
-      <span>Viewing as <b style="color:var(--pine-deep)">${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)">${role}</span></span>
+      <span>Viewing as <b style="color:var(--pine-deep)">${name}</b> &middot; <span class="stat-chip ${ADMIN?'ok':''} ${DEVELOPER?'role-badge-clickable':''}" id="${roleBadgeId}" style="display:inline-flex;padding:2px 9px;min-width:0;border-radius:12px;font-size:10px;vertical-align:middle;color:${ADMIN?'var(--pine-deep)':'var(--ink-soft)'};background:${ADMIN?'var(--pine-tint)':'var(--paper-dark)'};border:1px solid var(--line)" ${DEVELOPER?'title="Manage Developer access"':''}>${role}</span></span>
+      <button class="btn ghost sm" id="btnBackendSettingsBadge" title="Change backend URL" style="padding:3px 8px;font-size:11px">⚙</button>
       <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
     </div>
   `;
@@ -3937,11 +4175,44 @@ function renderIdentityBadge(inHeader){
 function bindIdentityBadge(){
   const b = document.getElementById('btnSwitchIdentity');
   if(b) b.addEventListener('click', clearIdentity);
+  if(DEVELOPER){
+    document.querySelectorAll('.role-badge-clickable').forEach(el=>{
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
+    });
+  }
+  const s = document.getElementById('btnBackendSettingsBadge');
+  if(s) s.addEventListener('click', ()=>{
+    if(confirm('Disconnect from the current Google Sheet backend and set a different one?')){
+      localStorage.removeItem(LS_BACKEND_URL_KEY);
+      render();
+    }
+  });
   renderBackendChip();
 }
 
 function tabBtn(key,label){
   return `<div class="tab ${state.tab===key?'active':''}" data-tab="${key}">${label}</div>`;
+}
+
+// Free place search (OpenStreetMap Nominatim) — no API key needed. Used for
+// the Itinerary location field's type-ahead suggestions. Each call aborts
+// the previous in-flight one, so fast typing doesn't leave stale requests
+// racing to update the dropdown out of order.
+let placeSearchAbortController = null;
+async function searchPlacesNominatim(query){
+  if(placeSearchAbortController) placeSearchAbortController.abort();
+  placeSearchAbortController = new AbortController();
+  try{
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(query);
+    const res = await fetch(url, { signal: placeSearchAbortController.signal });
+    if(!res.ok) return [];
+    const data = await res.json();
+    return data.map(item => ({ name: item.display_name, lat: item.lat, lon: item.lon }));
+  }catch(e){
+    if(e.name === 'AbortError') return null; // superseded by a newer keystroke — caller should ignore
+    return [];
+  }
 }
 
 function escapeHtml(s){
@@ -4109,9 +4380,10 @@ function renderPeople(t){
     return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
       <td class="name-col" data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
       <td class="mobile-col" data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
-      <td data-label="Access">${isGlobalDev
-          ? `<span class="access-badge developer">Developer</span>`
-          : `<span class="access-badge ${p.isTripAdmin?'admin':'member'}"><input type="checkbox" class="person-trip-admin" ${p.isTripAdmin?'checked':''} ${RO} title="Admin for this trip" style="vertical-align:middle;margin-right:4px;">${p.isTripAdmin?'Trip Admin':'Member'}</span>`}</td>
+      <td data-label="Access">
+        ${isGlobalDev ? `<span class="access-badge developer" style="margin-right:4px;">Developer</span>` : ''}
+        <span class="access-badge ${p.isTripAdmin?'admin':'member'}"><input type="checkbox" class="person-trip-admin" ${p.isTripAdmin?'checked':''} ${RO} title="Admin for this trip" style="vertical-align:middle;margin-right:4px;">${p.isTripAdmin?'Trip Admin':'Member'}</span>
+      </td>
       <td data-label="Role">
         <select class="person-role" ${RO} title="${selectedRole?escapeHtml(selectedRole.label):'Choose a role'}">
           <option value="">—</option>
@@ -4142,7 +4414,10 @@ function renderPeople(t){
     </div>
     <div class="panel-section">
       <div class="section-head"><h2>Members</h2>
-        ${ADMIN?'<button class="btn ghost sm" id="addPerson">+ Add member</button>':''}
+        <div style="display:flex;gap:8px">
+          ${ADMIN?`<button class="btn ghost sm" id="btnInviteToTrip">📱 Invite to this trip</button>`:''}
+          ${ADMIN?'<button class="btn ghost sm" id="addPerson">+ Add member</button>':''}
+        </div>
       </div>
       <div class="section-note">Tick "Trip Admin" for anyone who should be able to edit this specific trip — the trip's creator gets it automatically.</div>
       <div class="table-scroll">
@@ -4289,6 +4564,12 @@ function formatDayDate(dateStr){
   if(isNaN(d.getTime())) return '';
   return d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short', year:'numeric'});
 }
+function formatDayDateLong(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+}
 
 function renderMeals(t){
   const RO = ADMIN ? '' : 'disabled';
@@ -4326,49 +4607,56 @@ function renderItinerary(t){
       `<option value="${k}" ${k===selectedType?'selected':''}>${v.icon} ${v.label}</option>`
     ).join('');
   }
-  const cards = t.days.map((d,i)=>{
+  const dayGroups = t.days.map((d,i)=>{
     const acts = activitiesForDay(t, d.id);
+    const dateStr = t.startDate ? dayDateFor(t,i) : '';
+    const headerLabel = dateStr ? formatDayDateLong(dateStr) : d.label;
+
     const rows = acts.map((a,idx)=>{
       const meta = ACTIVITY_TYPES[a.type] || ACTIVITY_TYPES.activity;
       const mapsUrl = a.location && a.location.name
         ? (a.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a.location.name)))
         : '';
       return `
-      <div class="activity-card" data-activity="${a.id}">
-        <div class="activity-top-row">
-          <select class="activity-type" ${RO} title="${escapeHtml(meta.label)}">${typeOptionsFor(a.type)}</select>
-          ${ADMIN?`
-          <div class="activity-reorder">
-            <button class="btn ghost sm activity-up" title="Move up" ${idx===0?'disabled':''}>▲</button>
-            <button class="btn ghost sm activity-down" title="Move down" ${idx===acts.length-1?'disabled':''}>▼</button>
+      <div class="itin-row" data-activity="${a.id}">
+        <div class="itin-time-col">
+          <input type="time" class="activity-time itin-time-input" value="${escapeHtml(a.time||'')}" ${RO} title="Start time">
+          <input type="time" class="activity-endtime itin-endtime-input" value="${escapeHtml(a.endTime||'')}" ${RO} title="End time">
+        </div>
+        <div class="itin-line-col">
+          <label class="itin-icon-badge" title="${escapeHtml(meta.label)} — tap to change">
+            <span class="itin-icon-badge-emoji">${meta.icon}</span>
+            <select class="activity-type itin-type-select" ${RO}>${typeOptionsFor(a.type)}</select>
+          </label>
+        </div>
+        <div class="itin-detail-col">
+          <div class="itin-detail-top-row">
+            <input type="text" class="activity-title itin-title-input" value="${escapeHtml(a.title||'')}" placeholder="e.g. Depart for the boat ramp" ${RO}>
+            ${ADMIN?`
+            <div class="activity-reorder">
+              <button class="btn ghost sm activity-up" title="Move up" ${idx===0?'disabled':''}>▲</button>
+              <button class="btn ghost sm activity-down" title="Move down" ${idx===acts.length-1?'disabled':''}>▼</button>
+              <button class="del activity-del" title="Remove">✕</button>
+            </div>
+            `:''}
           </div>
-          <button class="del activity-del" title="Remove">✕</button>
-          `:''}
+          <div class="itin-loc-row" style="position:relative">
+            <input type="text" class="activity-location itin-loc-input" value="${escapeHtml(a.location?a.location.name:'')}" placeholder="📍 Location (optional)" autocomplete="off" ${RO}>
+            ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="activity-map-link" title="Open in Google Maps">🗺️</a>` : ''}
+            <div class="place-suggestions" hidden></div>
+          </div>
+          <textarea class="activity-notes itin-notes-input" rows="1" placeholder="Notes (optional)" ${RO}>${escapeHtml(a.notes||'')}</textarea>
         </div>
-        <div class="activity-time-row">
-          <input type="time" class="activity-time" value="${escapeHtml(a.time||'')}" ${RO} title="Start time">
-          <span class="activity-time-sep">–</span>
-          <input type="time" class="activity-endtime" value="${escapeHtml(a.endTime||'')}" ${RO} title="End time">
-          <input type="text" class="activity-title" value="${escapeHtml(a.title||'')}" placeholder="e.g. Depart for the boat ramp" ${RO}>
-        </div>
-        <div class="activity-loc-row">
-          <input type="text" class="activity-location" value="${escapeHtml(a.location?a.location.name:'')}" placeholder="📍 Location (optional)" ${RO}>
-          ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="activity-map-link" title="Open in Google Maps">🗺️</a>` : ''}
-        </div>
-        <textarea class="activity-notes" rows="1" placeholder="Notes (optional)" ${RO}>${escapeHtml(a.notes||'')}</textarea>
       </div>
     `;
     }).join('');
     return `
-    <div class="day-card" data-day="${d.id}">
-      <div class="day-title">
-        <span class="day-title-text">${escapeHtml(d.label)}</span>
+    <div class="itin-day-group" data-day="${d.id}">
+      <div class="itin-date-header">${escapeHtml(headerLabel)}</div>
+      <div class="itin-rows-wrap">
+        ${rows || `<div class="empty" style="padding:14px 0 14px 60px;font-size:12px;">Nothing planned yet.</div>`}
       </div>
-      ${t.startDate ? `<div class="day-date-formatted">${formatDayDate(dayDateFor(t,i))}</div>` : ''}
-      <div class="activity-list">
-        ${rows || `<div class="empty" style="padding:16px;font-size:12px;">Nothing planned yet.</div>`}
-      </div>
-      ${ADMIN?`<button class="btn ghost sm add-activity-btn" data-day-id="${d.id}" style="margin-top:8px;width:100%">+ Add activity</button>`:''}
+      ${ADMIN?`<button class="btn ghost sm add-activity-btn" data-day-id="${d.id}" style="margin:6px 0 4px 60px">+ Add activity</button>`:''}
     </div>
   `;
   }).join('');
@@ -4376,9 +4664,9 @@ function renderItinerary(t){
   return `
     <div class="panel-section">
       <div class="section-head"><h2>🗓️ Itinerary</h2></div>
-      <div class="section-note">Day-by-day plan — add flights, check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
-      <div class="day-grid">
-        ${cards || `<div class="empty">No days added yet — add days in the Meal Plan tab first.</div>`}
+      <div class="section-note">Your trip timeline — flights, check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
+      <div class="itinerary-timeline">
+        ${dayGroups || `<div class="empty">No days added yet — add days in the Meal Plan tab first.</div>`}
       </div>
     </div>
   `;
@@ -4529,8 +4817,8 @@ function bindPanelEvents(){
     const person = findPerson(t, rowId(e));
     if(person.isTripAdmin && !e.target.checked){
       const remainingTripAdmins = t.people.filter(p=>p.isTripAdmin && p.id!==person.id).length;
-      if(remainingTripAdmins===0 && !DEVELOPER){
-        alert('This trip needs at least one admin — promote someone else first, or ask the Developer to help.');
+      if(remainingTripAdmins===0){
+        alert('This trip needs at least one admin — promote someone else first.');
         e.target.checked = true;
         return;
       }
@@ -4544,6 +4832,9 @@ function bindPanelEvents(){
   }));
   id('addPerson') && id('addPerson').addEventListener('click', ()=>{
     t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel();
+  });
+  id('btnInviteToTrip') && id('btnInviteToTrip').addEventListener('click', ()=>{
+    state.inviteForTripId = t.id; state.showInviteModal = true; render();
   });
 
   // CATCH LOG
@@ -4600,13 +4891,40 @@ function bindPanelEvents(){
     findActivity(t, rowId(e,'activity')).title = e.target.value; scheduleSave();
   }));
   qa('.activity-location').forEach(el=>{
+    const dropdown = el.parentElement.querySelector('.place-suggestions');
+    function closeDropdown(){ if(dropdown){ dropdown.hidden = true; dropdown.innerHTML = ''; } }
     el.addEventListener('input', e=>{
       const a = findActivity(t, rowId(e,'activity'));
       if(!a.location) a.location = {name:'', mapsUrl:''};
       a.location.name = e.target.value;
-      a.location.mapsUrl = ''; // clear any stale custom link — re-derived from the name
+      a.location.mapsUrl = ''; // clear any stale custom link — re-derived from the name unless a suggestion is picked below
       scheduleSave();
+
+      clearTimeout(el._placeSearchTimer);
+      const query = e.target.value.trim();
+      if(query.length < 3){ closeDropdown(); return; }
+      el._placeSearchTimer = setTimeout(async ()=>{
+        const results = await searchPlacesNominatim(query);
+        if(results === null) return; // aborted — a newer search is already in flight
+        if(!dropdown || el.value.trim() !== query) return; // stale by the time results came back
+        if(!results.length){ closeDropdown(); return; }
+        dropdown.innerHTML = results.map((r,i)=>`<div class="place-suggestion-item" data-idx="${i}">${escapeHtml(r.name)}</div>`).join('');
+        dropdown.hidden = false;
+        dropdown.querySelectorAll('.place-suggestion-item').forEach((item,i)=>{
+          item.addEventListener('mousedown', ev=>{ // mousedown fires before the input's blur, so the click isn't lost
+            ev.preventDefault();
+            const chosen = results[i];
+            el.value = chosen.name;
+            a.location.name = chosen.name;
+            a.location.mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(chosen.lat + ',' + chosen.lon);
+            closeDropdown();
+            scheduleSave();
+            renderPanel(); // refresh the map-link icon now that we have a precise location
+          });
+        });
+      }, 450); // debounced — Nominatim's free tier asks for at most ~1 request/sec
     });
+    el.addEventListener('blur', ()=>{ setTimeout(closeDropdown, 150); }); // slight delay so a suggestion click still registers
     el.addEventListener('change', ()=>renderPanel()); // refresh the map-link icon
   });
   qa('.activity-notes').forEach(el=>el.addEventListener('input', e=>{
@@ -4910,9 +5228,10 @@ function renderManageAccessModal(){
       <div class="modal" style="max-width:560px">
         <h2>👑 Manage Access</h2>
         <div class="section-note" style="margin-bottom:14px">
-          This list is only for <b>Developer</b> access — sees and edits every trip, and manages this list.
-          Everyone else is a <b>Member</b> by default. Trip Admin is separate and per-trip: whoever creates
-          a trip becomes its admin automatically, and can promote others within that trip's People tab.
+          This list is only for <b>Developer</b> access — who can manage this list. A Developer has no automatic
+          trip access; editing a trip requires being personally added to it, same as anyone. Everyone else is a
+          <b>Member</b> by default. Trip Admin is separate and per-trip: whoever creates a trip becomes its admin
+          automatically, and can promote others within that trip's People tab.
         </div>
         <table>
           <thead><tr><th class="wide-col">Name</th><th>Level</th><th></th></tr></thead>
@@ -4920,6 +5239,21 @@ function renderManageAccessModal(){
         </table>
         <button class="btn ghost sm" id="addAccessRow" style="margin-top:10px">+ Add person</button>
         <div id="accessMsg" class="section-note" style="margin-top:10px"></div>
+
+        <div class="maintenance-toggle-box">
+          <div>
+            <div class="maintenance-toggle-title">🔧 Maintenance Mode</div>
+            <div class="section-note" style="margin:2px 0 0">
+              Temporary, visible-everywhere access to every trip's data for fixing issues — off by default each
+              session. Turn it off again when you're done.
+            </div>
+          </div>
+          <label class="maintenance-switch">
+            <input type="checkbox" id="maintenanceModeToggle" ${state.developerMaintenanceMode?'checked':''}>
+            <span class="maintenance-switch-track"></span>
+          </label>
+        </div>
+
         <div class="modal-actions">
           <button class="btn" id="closeManageAccess">Done</button>
         </div>
@@ -4985,23 +5319,34 @@ function bindManageAccessModal(){
     saveUserDirectory();
     render();
   });
+  const maintToggle = document.getElementById('maintenanceModeToggle');
+  if(maintToggle) maintToggle.addEventListener('change', e=>{
+    state.developerMaintenanceMode = e.target.checked;
+    loadTripsAndTrip(); // re-fetch so the new visibility rule applies immediately, modal stays open throughout
+  });
 }
 
 /* ============================= Invite (QR code / link) ============================= */
-function buildInviteUrl(){
+function buildInviteUrl(tripId){
   const backend = getBackendUrl();
   const base = window.location.origin + window.location.pathname;
-  return base + '?b=' + encodeURIComponent(backend);
+  let url = base + '?b=' + encodeURIComponent(backend);
+  if(tripId) url += '&t=' + encodeURIComponent(tripId);
+  return url;
 }
 function renderInviteModal(){
-  const url = buildInviteUrl();
+  const tripId = state.inviteForTripId || null;
+  const trip = tripId ? state.plansCache[tripId] : null;
+  const url = buildInviteUrl(tripId);
   return `
     <div class="modal-backdrop" id="inviteBackdrop">
       <div class="modal" style="max-width:420px; text-align:center">
-        <h2>📱 Invite a member</h2>
+        <h2>📱 ${trip ? `Invite to "${escapeHtml(trip.name)}"` : 'Invite a member'}</h2>
         <div class="section-note" style="margin-bottom:14px">
           Scan this with a phone camera, or share the link below in a text or WhatsApp message.
-          It opens the app and connects automatically — no setup needed, they just type their name.
+          ${trip
+            ? 'It opens the app, connects automatically, and adds them straight into this trip — no setup needed, they just type their name.'
+            : 'It opens the app and connects automatically — no setup needed, they just type their name. This general link doesn\u2019t add them to any specific trip; from a trip\u2019s People tab you can invite straight into that trip instead.'}
         </div>
         <div id="inviteQr" style="display:flex; justify-content:center; margin:14px 0;"></div>
         <div class="field">
@@ -5027,7 +5372,7 @@ function bindInviteModal(){
   // smallest one that fits this URL, 'M' balances scan-reliability and size.
   try{
     const qr = qrcode(-1, 'M');
-    qr.addData(buildInviteUrl());
+    qr.addData(buildInviteUrl(state.inviteForTripId));
     qr.make();
     document.getElementById('inviteQr').innerHTML = qr.createSvgTag({scalable:true});
     const svg = document.getElementById('inviteQr').querySelector('svg');
@@ -5069,13 +5414,31 @@ function applyImport(t, data){
     });
   }
   if(Array.isArray(data.people)){
+    // Preserve trip-admin status for anyone who already had it, matched by
+    // name — otherwise importing (which fully replaces the People list)
+    // would silently strip admin rights from whoever just set the trip up,
+    // locking them out of their own trip immediately after import.
+    const priorAdminNames = new Set(t.people.filter(p=>p.isTripAdmin).map(p=>String(p.name||'').trim().toLowerCase()));
     t.people = data.people.map(p=>({
       id: uid(),
       name: p.name||'',
       phone: p.phone||'',
       roleId: roleIdByLabel[p.roleLabel] || (t.roles[0] && t.roles[0].id) || '',
       paid: Number(p.paid)||0,
+      isTripAdmin: priorAdminNames.has(String(p.name||'').trim().toLowerCase()),
     }));
+    // Safety net: if the import didn't include anyone who was previously
+    // admin (e.g. names didn't match), make sure whoever is doing the
+    // import right now still ends up with access to their own trip.
+    if(state.identity && !t.people.some(p=>p.isTripAdmin)){
+      const myName = String(state.identity.name||'').trim().toLowerCase();
+      const me = t.people.find(p=>String(p.name||'').trim().toLowerCase()===myName);
+      if(me){
+        me.isTripAdmin = true;
+      } else {
+        t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
+      }
+    }
   }
   if(Array.isArray(data.days)){
     t.days = data.days.map(d=>({id:uid(), label:d.label||'', breakfast:d.breakfast||'', lunch:d.lunch||'', dinner:d.dinner||''}));
