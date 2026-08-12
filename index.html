@@ -3636,7 +3636,7 @@ function identityFromAuthUser(user){
   return {name: user.displayName || '', phone: '', email: user.email || '', uid: user.uid};
 }
 async function clearIdentity(){
-  await signOut(auth); // triggers onAuthStateChanged, which handles the rest
+  await withTimeout(signOut(auth), 'Sign out'); // triggers onAuthStateChanged, which handles the rest
 }
 
 /* ============================= Swipe-to-switch-tabs ============================= */
@@ -5288,7 +5288,7 @@ function renderIdentityGate(){
         <div id="authStatus" class="section-note" style="margin-top:10px"></div>
         <div class="section-note" style="margin-top:16px;text-align:center">
           <a href="#" id="authToggleMode">${isSignup ? 'Already have an account? Sign in' : 'New here? Create an account'}</a>
-          ${isSignup ? '' : `<br><a href="#" id="authForgotPassword" style="display:inline-block;margin-top:6px">Forgot password?</a>`}
+          <br><a href="#" id="authForgotPassword" style="display:inline-block;margin-top:6px">Forgot password?</a>
         </div>
       </div>
     </div>
@@ -5309,11 +5309,15 @@ function bindIdentityGate(){
     const emailField = document.getElementById('authEmail');
     const email = (emailField.value||'').trim() || prompt('Enter your account email:');
     if(!email) return;
+    setStatus('Sending reset email…', false);
+    forgotLink.style.pointerEvents = 'none';
     try{
-      await sendPasswordResetEmail(auth, email);
-      setStatus('Reset link sent to '+email+' — check your inbox.', false);
+      await withTimeout(sendPasswordResetEmail(auth, email), 'Sending reset email');
+      setStatus('✓ Reset link sent to '+email+' — check your inbox (and spam folder).', false);
     }catch(e){
       setStatus(authErrorMessage(e), true);
+    }finally{
+      forgotLink.style.pointerEvents = '';
     }
   });
 
@@ -5332,13 +5336,13 @@ function bindIdentityGate(){
     setStatus(isSignup ? 'Creating your account…' : 'Signing in…', false);
     try{
       if(isSignup){
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, {displayName: name});
-        await sendEmailVerification(cred.user, verificationActionCodeSettings());
+        const cred = await withTimeout(createUserWithEmailAndPassword(auth, email, password), 'Creating account');
+        await withTimeout(updateProfile(cred.user, {displayName: name}), 'Saving name');
+        await withTimeout(sendEmailVerification(cred.user, verificationActionCodeSettings()), 'Sending verification email');
         // onAuthStateChanged fires from the sign-up itself — it'll see an
         // unverified user and render() will switch to the verify-email gate.
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await withTimeout(signInWithEmailAndPassword(auth, email, password), 'Signing in');
       }
     }catch(e){
       setStatus(authErrorMessage(e), true);
@@ -5395,7 +5399,7 @@ function bindVerifyEmailGate(){
     btn.disabled = true;
     setStatus('Checking…', false);
     try{
-      await reload(auth.currentUser);
+      await withTimeout(reload(auth.currentUser), 'Checking verification status');
       if(auth.currentUser.emailVerified){
         await handleAuthStateChange(auth.currentUser);
       } else {
@@ -5410,7 +5414,7 @@ function bindVerifyEmailGate(){
   document.getElementById('verifyResend').addEventListener('click', async (e)=>{
     e.preventDefault();
     try{
-      await sendEmailVerification(auth.currentUser, verificationActionCodeSettings());
+      await withTimeout(sendEmailVerification(auth.currentUser, verificationActionCodeSettings()), 'Sending verification email');
       setStatus('Sent — check your inbox (and spam folder).', false);
     }catch(e){
       setStatus(authErrorMessage(e), true);
