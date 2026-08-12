@@ -3039,6 +3039,7 @@ var qrcode = function() {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   initializeFirestore, doc, getDoc, setDoc, collection,
+  persistentLocalCache, persistentMultipleTabManager,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import {
   getStorage, ref, uploadString, getDownloadURL,
@@ -3061,7 +3062,30 @@ const firebaseApp = initializeApp(firebaseConfig);
 // its default streaming connection can hang indefinitely — not error, just
 // never resolve — behind certain corporate networks, proxies, VPNs, or
 // browser extensions. This detects that case and falls back automatically.
-const db = initializeFirestore(firebaseApp, {experimentalAutoDetectLongPolling: true});
+//
+// persistentLocalCache is what actually makes the app work offline: cached
+// trip data survives a dropped connection, and edits made while offline are
+// queued locally and synced automatically once the connection comes back —
+// this was one of the original reasons for moving off the old backend in
+// the first place, and hadn't actually been turned on until now.
+// persistentMultipleTabManager lets several tabs of the app share one
+// offline cache instead of fighting over it.
+//
+// IndexedDB (what the persistent cache is built on) isn't available in
+// every context — some private-browsing modes and restricted iframes block
+// it. Rather than let that crash the whole app on load, fall back to a
+// memory-only cache (no offline support, but everything else still works)
+// if the persistent version fails to initialize.
+let db;
+try{
+  db = initializeFirestore(firebaseApp, {
+    localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()}),
+    experimentalAutoDetectLongPolling: true,
+  });
+}catch(e){
+  console.warn('Persistent offline cache unavailable, falling back to memory-only:', e);
+  db = initializeFirestore(firebaseApp, {experimentalAutoDetectLongPolling: true});
+}
 const storage = getStorage(firebaseApp);
 const auth = getAuth(firebaseApp);
 
@@ -3167,11 +3191,17 @@ function renderBackendChip(){
     unknown: {text:'', cls:''},
     ok: {text:'● Synced', cls:'ok'},
     error: {text:'⚠ Sync error — check your connection', cls:'warn'},
+    offline: {text:'○ Offline — changes saved on this device, will sync when back online', cls:'warn'},
   };
-  const m = map[backendStatus] || map.unknown;
+  const m = map[navigator.onLine ? backendStatus : 'offline'] || map.unknown;
   el.textContent = m.text;
   el.className = 'backend-chip ' + m.cls;
 }
+// The browser's own online/offline events — not a poll, fires immediately
+// when connectivity actually changes. renderBackendChip() re-checks
+// navigator.onLine itself, so both events can just point at the same thing.
+window.addEventListener('online', renderBackendChip);
+window.addEventListener('offline', renderBackendChip);
 
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
 const DEFAULT_CURRENCY = 'AUD';
