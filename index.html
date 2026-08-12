@@ -3334,6 +3334,27 @@ function countDevelopers(){
 function saveUserDirectory(){
   storeSet('user-directory', state.userDirectory, true);
 }
+// Removes a uid from the server-side developer allowlist. Called on demotion
+// or deletion of a Developer directory entry — without this, changing
+// someone's label in Manage Access wouldn't actually revoke the elevated
+// Firestore-rules access they were granted the first time they logged in.
+async function revokeDeveloperUid(uidToRevoke){
+  const accessControl = await storeGet('access-control', true);
+  if(!accessControl || !Array.isArray(accessControl.developerUids)) return;
+  const idx = accessControl.developerUids.indexOf(uidToRevoke);
+  if(idx !== -1){
+    accessControl.developerUids.splice(idx, 1);
+    await storeSet('access-control', accessControl, true);
+  }
+}
+async function grantDeveloperUid(uidToGrant){
+  const accessControl = (await storeGet('access-control', true)) || {developerUids:[]};
+  if(!Array.isArray(accessControl.developerUids)) accessControl.developerUids = [];
+  if(!accessControl.developerUids.includes(uidToGrant)){
+    accessControl.developerUids.push(uidToGrant);
+    await storeSet('access-control', accessControl, true);
+  }
+}
 
 const TYPE_META = {
   fishing: {glyph:'🎣', label:'Fishing Trip'},
@@ -3418,6 +3439,8 @@ function ensureTripShape(t){
   if(t.startDate === undefined) t.startDate = '';
   if(!t.catchLog) t.catchLog = {};
   if(t.catchLogEnabled === undefined) t.catchLogEnabled = false;
+  if(!Array.isArray(t.memberUids)) t.memberUids = [];
+  if(!Array.isArray(t.adminUids)) t.adminUids = [];
   // Guard every array field — a trip that's ever been hand-edited, partially
   // imported, or hit a save error in the past could have one of these missing
   // or containing a stray null/undefined entry, and any of that used to crash
@@ -3738,6 +3761,10 @@ function init(){
   onAuthStateChanged(auth, handleAuthStateChange);
 }
 
+// Tracks which signed-in uid the reconciliation pass (in loadTripsAndTrip)
+// has already run for this session — null means "not yet done this session".
+let reconciledForUid = null;
+
 async function loadTripsAndTrip(){
   showLoading('Loading your plans…', loadTripsAndTrip);
   const idx = await storeGet('trips-index', true);
@@ -3773,13 +3800,75 @@ async function loadTripsAndTrip(){
     const t = state.plansCache[pendingJoinTripId];
     const myName = String(state.identity.name||'').trim().toLowerCase();
     const already = t.people.some(p=>String(p.name||'').trim().toLowerCase()===myName);
-    if(!already){
-      t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
+    const alreadyHasUid = (t.memberUids||[]).includes(state.identity.uid);
+    if(!already || !alreadyHasUid){
+      if(!already){
+        t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
+      }
+      if(!alreadyHasUid){
+        if(!Array.isArray(t.memberUids)) t.memberUids = [];
+        t.memberUids.push(state.identity.uid);
+      }
       await storeSet('trip:'+pendingJoinTripId, t, true);
     }
     justJoinedTripId = pendingJoinTripId;
   }
   setPendingJoinTripId(null);
+
+  // Reconcile every OTHER trip too — not just one from an invite link.
+  // Anyone added by name before they had an account (manual add, or a trip
+  // migrated from the old backend) needs their real uid recorded in
+  // memberUids the first time they actually sign in themselves; security
+  // rules check memberUids, not names, so without this their write access
+  // would silently never work despite being listed as a person on the trip.
+  //
+  // This whole pass only needs to run ONCE per signed-in session — it's
+  // pure bookkeeping, not something that changes on every reload. Skipping
+  // it on repeat calls (manual refresh, "Try again", re-opening the join
+  // box) noticeably speeds up everything after the very first login.
+  if(reconciledForUid !== state.identity.uid){
+  const myNameLower = String(state.identity.name||'').trim().toLowerCase();
+  const toReconcile = Object.values(state.plansCache).filter(t=>{
+    if(t.id === justJoinedTripId) return false; // already handled above
+    const named = t.people.some(p=>String(p.name||'').trim().toLowerCase()===myNameLower);
+    const hasUid = (t.memberUids||[]).includes(state.identity.uid);
+    return named && !hasUid;
+  });
+  if(toReconcile.length){
+    await Promise.all(toReconcile.map(t=>{
+      if(!Array.isArray(t.memberUids)) t.memberUids = [];
+      t.memberUids.push(state.identity.uid);
+      return storeSet('trip:'+t.id, t, true);
+    }));
+  }
+
+  // Same idea, but for global Developer status: meta/user-directory is
+  // still matched by name (unchanged), but security rules need a uid to
+  // check against, so mirror any name-matched Developer into a separate
+  // uid-keyed list the rules can actually read. The uid is also written
+  // onto the directory entry itself, so Manage Access can look it up later
+  // to properly revoke access-control on a demotion or removal — not just
+  // update the label.
+  const directory = state.userDirectory;
+  const myDirIndex = directory.findIndex(u=>String(u.name||'').trim().toLowerCase()===myNameLower);
+  if(myDirIndex !== -1){
+    let directoryChanged = false;
+    if(directory[myDirIndex].uid !== state.identity.uid){
+      directory[myDirIndex].uid = state.identity.uid;
+      directoryChanged = true;
+    }
+    if(directory[myDirIndex].level==='developer'){
+      const accessControl = (await storeGet('access-control', true)) || {developerUids:[]};
+      if(!Array.isArray(accessControl.developerUids)) accessControl.developerUids = [];
+      if(!accessControl.developerUids.includes(state.identity.uid)){
+        accessControl.developerUids.push(state.identity.uid);
+        await storeSet('access-control', accessControl, true);
+      }
+    }
+    if(directoryChanged) await storeSet('user-directory', directory, true);
+  }
+  reconciledForUid = state.identity.uid;
+  } // end once-per-session reconciliation guard
 
   // Everyone — Developer included — only sees trips they're actually part of
   // (their name appears in that trip's People list), UNLESS Developer has
@@ -3889,6 +3978,13 @@ async function createTrip(name, type, startDate, numDays, currency){
     t.days = Array.from({length:n}, (_,i)=>({id:uid(), label:'Day '+(i+1), breakfast:'', lunch:'', dinner:''}));
     // The creator is automatically added as a member AND this trip's admin.
     t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
+    // memberUids/adminUids are flat uid arrays kept alongside `people` —
+    // Firestore security rules can check "is my uid in this array" cheaply,
+    // but can't efficiently check "does this array of objects contain one
+    // whose isTripAdmin field is true and whose uid matches mine". These
+    // exist purely so the rules (not just the client) can enforce access.
+    t.memberUids = [state.identity.uid];
+    t.adminUids = [state.identity.uid];
     // Brand new trip, created entirely under the per-trip-admin system —
     // never subject to the legacy grandfather-in migration (that's only for
     // trips that predate this system; applying it here would silently
@@ -5769,8 +5865,14 @@ function bindManageAccessModal(){
         e.target.value = 'developer';
         return;
       }
+      const wasDeveloper = entry.level==='developer';
       entry.level = newLevel;
       saveUserDirectory();
+      if(wasDeveloper && newLevel!=='developer' && entry.uid){
+        revokeDeveloperUid(entry.uid); // closes the actual database-level access, not just the label
+      } else if(!wasDeveloper && newLevel==='developer' && entry.uid){
+        grantDeveloperUid(entry.uid); // takes effect immediately, not just on their next login
+      }
       showMsg('Saved.', false);
       // If the person being changed is ME, my own access updates live.
       if(state.identity && entry.name.trim().toLowerCase()===state.identity.name.trim().toLowerCase()){
@@ -5786,8 +5888,10 @@ function bindManageAccessModal(){
         showMsg('Can\u2019t remove the last Developer — promote someone else first.', true);
         return;
       }
+      const wasDeveloperUid = entry.level==='developer' ? entry.uid : null;
       state.userDirectory.splice(i,1);
       saveUserDirectory();
+      if(wasDeveloperUid) revokeDeveloperUid(wasDeveloperUid);
       state.showManageAccessModal = true; // stay open
       render();
     });
