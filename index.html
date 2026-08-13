@@ -117,6 +117,15 @@
   .access-badge.developer{background:var(--rust-tint); color:var(--rust); border-color:#e0b28c; font-weight:600;}
   .access-badge.admin{background:var(--pine-tint); color:var(--pine-deep); border-color:#a9c6b8;}
   .access-badge.member{background:var(--paper-dark); color:var(--ink-soft);}
+  .access-badge.ok{background:var(--pine-tint); color:var(--pine-deep); border-color:#a9c6b8;}
+  .access-badge.soon{background:var(--rust-tint); color:var(--rust); border-color:#e0b28c;}
+  .access-badge.danger{background:var(--danger-tint); color:var(--danger); border-color:#d9b2a8; font-weight:600;}
+  .doc-card{border:1px solid var(--line-soft); border-radius:var(--radius); padding:12px 14px; margin-bottom:10px; background:var(--paper-dark);}
+  .doc-card-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;}
+  .doc-card-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px 12px;}
+  .doc-field label{display:block; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:2px;}
+  .doc-thumb{width:44px; height:44px; border-radius:4px; object-fit:cover; border:1px solid var(--line); cursor:pointer; flex-shrink:0;}
+  .doc-thumb-empty{width:44px; height:44px; border-radius:4px; border:1px dashed var(--line); display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; flex-shrink:0; color:var(--ink-soft);}
   .tag .titles{min-width:0;}
   .tag h1{font-size:22px; color:#F4EFE0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:46vw;}
   .tag .sub{font-size:11px; letter-spacing:.12em; text-transform:uppercase; opacity:.75; margin-top:3px;}
@@ -506,6 +515,60 @@
   .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px;}
 
   .footer-note{margin-top:26px; text-align:center; font-size:11px; color:var(--ink-soft); font-style:italic;}
+
+  /* ---------- Auth screens (sign in / sign up / verify) ---------- */
+  .auth-screen{
+    min-height:100vh; min-height:100dvh; background:var(--pine-deep);
+    display:flex; align-items:center; justify-content:center; padding:32px 18px;
+  }
+  .auth-card{
+    background:#fff; border-radius:20px; padding:36px 28px 30px; width:100%; max-width:420px;
+    box-shadow:0 20px 50px rgba(0,0,0,0.28);
+  }
+  .auth-logo{
+    display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:26px;
+  }
+  .auth-logo-mark{font-size:26px;}
+  .auth-logo-word{
+    font-family:'Oswald',sans-serif; font-size:26px; font-weight:600; color:var(--ink);
+    text-transform:lowercase; letter-spacing:.01em;
+  }
+  .auth-heading{
+    font-family:'Oswald',sans-serif; font-size:24px; font-weight:600; color:var(--ink);
+    text-align:center; line-height:1.3; margin-bottom:26px;
+  }
+  .auth-field{margin-bottom:18px;}
+  .auth-field label{
+    display:block; font-family:'Work Sans',sans-serif; font-size:14px; font-weight:600;
+    color:var(--ink); margin-bottom:7px;
+  }
+  .auth-field input{
+    width:100%; padding:13px 14px; border:1.5px solid var(--line); border-radius:10px;
+    background:#fff; font-size:15px; font-family:'Work Sans',sans-serif; color:var(--ink);
+  }
+  .auth-field input:focus{outline:none; border-color:var(--pine);}
+  .auth-password-wrap{position:relative;}
+  .auth-password-wrap input{padding-right:44px;}
+  .auth-password-toggle{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:none; border:none; cursor:pointer; font-size:16px; padding:8px; color:var(--ink-soft);
+    line-height:1;
+  }
+  .auth-forgot{
+    display:block; text-align:center; margin:4px 0 20px; font-family:'Work Sans',sans-serif;
+    font-size:14px; font-weight:600; color:var(--pine-deep); text-decoration:underline;
+  }
+  .auth-submit{
+    width:100%; padding:15px; border:none; border-radius:10px; background:var(--pine-deep); color:#fff;
+    font-family:'Oswald',sans-serif; font-size:16px; text-transform:none; letter-spacing:0; cursor:pointer;
+  }
+  .auth-submit:hover{background:var(--pine);}
+  .auth-submit:disabled{opacity:.6; cursor:default;}
+  .auth-switch{
+    text-align:center; margin-top:22px; font-family:'Work Sans',sans-serif; font-size:14px; color:var(--ink);
+  }
+  .auth-switch a{color:var(--pine-deep); font-weight:700; text-decoration:underline;}
+  .auth-status{text-align:center; margin-top:14px; font-size:13px; min-height:16px;}
 
   @media (max-width:640px), (max-height:520px) and (orientation:landscape){
     html, body{ overflow-x:hidden; } /* hard safety net against any element pushing the page wider than the screen */
@@ -3048,6 +3111,9 @@ import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, sendPasswordResetEmail, sendEmailVerification, updateProfile, reload,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
+  getFunctions, httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAp35VXNCqUZGuQOFKfkBO-LZY9wTKyB7Y",
@@ -3088,6 +3154,9 @@ try{
 }
 const storage = getStorage(firebaseApp);
 const auth = getAuth(firebaseApp);
+// Region must match wherever the getFlightStatus Cloud Function is deployed
+// (see functions/index.js) — Sydney, to match the Firestore region above.
+const functionsClient = getFunctions(firebaseApp, "australia-southeast1");
 
 /* ============================= Storage helpers ============================= */
 /* Personal (per-device) data uses plain localStorage — this file is meant to be
@@ -3152,6 +3221,20 @@ async function backendUploadPhoto(tripId, dataUrl){
     const photoRef = ref(storage, path);
     await withTimeout(uploadString(photoRef, dataUrl, 'data_url'), 'Photo upload');
     const url = await getDownloadURL(photoRef);
+    return {ok:true, url};
+  }catch(e){
+    return {ok:false, error: String(e && e.message || e)};
+  }
+}
+// Used for Travel Document scans (passports, visas, insurance, etc) — same
+// pattern as backendUploadPhoto but keyed by document id, and accepts PDFs
+// as well as images (no filename extension assumed).
+async function backendUploadDocument(tripId, docId, dataUrl){
+  try{
+    const path = 'trip-documents/' + tripId + '/' + docId + '-' + Date.now();
+    const fileRef = ref(storage, path);
+    await withTimeout(uploadString(fileRef, dataUrl, 'data_url'), 'Document upload');
+    const url = await getDownloadURL(fileRef);
     return {ok:true, url};
   }catch(e){
     return {ok:false, error: String(e && e.message || e)};
@@ -3264,7 +3347,7 @@ const ACCESS_LEVELS = {
   admin:     {label:'Trip Admin', rank:1}, // per-trip only — never a global directory level going forward
   member:    {label:'Member', rank:0},
 };
-const TAB_ORDER = ['overview','itinerary','shopping','meals','costs','people'];
+const TAB_ORDER = ['overview','itinerary','documents','shopping','meals','people'];
 
 /* ============================= App state ============================= */
 const state = {
@@ -3430,10 +3513,23 @@ function newTrip(name, type, currency){
     shopping: [],
     catchLog: {},               // { [personId]: { [dayId]: count } } — days link straight to Meal Plan
     catchLogEnabled: false,     // Catch Log is opt-in — hidden until an admin turns it on for this trip
+    costsEnabled: false,        // Costs is opt-in too — hidden inside the People tab until turned on
     activities: [],             // [{id, dayId, type, time, endTime, title, location:{name,mapsUrl}, notes, order}] — days link to Meal Plan
     balanceForward: {label:'Balance FW', amount:0},  // rollover credit/debit from a previous trip — not tied to any one person
+    documents: [],   // [{id, personId, type, number, country, expiryDate, notes, fileUrl}] — passports/visas/insurance/ID, so less paperwork to carry
+    bookings: [],    // [{id, label, provider, refNumber, startDate, endDate, notes}] — accommodation/car hire/activity confirmations
+    flights: [],     // [{id, personId, airline, flightNumber, date, depAirport, depTime, arrAirport, arrTime, bookingRef, status, statusDetail, statusCheckedAt}]
   };
 }
+
+const DOCUMENT_TYPES = {
+  passport:     {icon:'🛂', label:'Passport'},
+  visa:         {icon:'📋', label:'Visa'},
+  insurance:    {icon:'🩺', label:'Travel Insurance'},
+  id:           {icon:'🪪', label:'ID / Licence'},
+  vaccination:  {icon:'💉', label:'Vaccination / Medical'},
+  other:        {icon:'📄', label:'Other'},
+};
 
 const ACTIVITY_TYPES = {
   flight:        {icon:'✈️', label:'Flight'},
@@ -3469,6 +3565,7 @@ function ensureTripShape(t){
   if(t.startDate === undefined) t.startDate = '';
   if(!t.catchLog) t.catchLog = {};
   if(t.catchLogEnabled === undefined) t.catchLogEnabled = false;
+  if(t.costsEnabled === undefined) t.costsEnabled = false;
   if(!Array.isArray(t.memberUids)) t.memberUids = [];
   if(!Array.isArray(t.adminUids)) t.adminUids = [];
   // Guard every array field — a trip that's ever been hand-edited, partially
@@ -3494,6 +3591,12 @@ function ensureTripShape(t){
     if(a.order===undefined) a.order = i;
   });
   if(!t.balanceForward) t.balanceForward = {label:'Balance FW', amount:0};
+  if(!Array.isArray(t.documents)) t.documents = [];
+  t.documents = t.documents.filter(d=>d);
+  if(!Array.isArray(t.bookings)) t.bookings = [];
+  t.bookings = t.bookings.filter(b=>b);
+  if(!Array.isArray(t.flights)) t.flights = [];
+  t.flights = t.flights.filter(f=>f);
   // One-time per-trip migration: make sure EVERY legacy admin/developer still
   // listed in this trip's People actually has isTripAdmin:true, correcting
   // both never-set (undefined) and incorrectly-saved (false) cases — not
@@ -3928,6 +4031,7 @@ async function loadTripsAndTrip(){
 function openTrip(id){
   const t = state.plansCache[id];
   if(!t) return;
+  ensureTripShape(t); // safety net — normalizes any trip object that landed in the cache without going through the normal load path (e.g. a freshly duplicated trip)
   state.trip = t;
   computeAdminForOpenTrip(); // ADMIN now reflects whether I can edit THIS trip specifically
   state.screen = 'trip';
@@ -4078,8 +4182,12 @@ async function duplicateTripById(id){
       shopping: src.shopping.map(s=>({...s, id:uid(), unitActual:0, purchased:false})), // list copied, shopping progress reset
       catchLog: {},                                                    // catch counts are per-trip, start fresh
       catchLogEnabled: !!src.catchLogEnabled,                          // the on/off preference carries over, the data doesn't
+      costsEnabled: !!src.costsEnabled,                                // same for the Costs toggle
       activities: src.activities.map(a=>({...a, id:uid(), dayId: dayIdMap[a.dayId]||'', location:{...(a.location||{name:'',mapsUrl:''})}})),
       balanceForward: {label:'Balance FW', amount:0}, // rollover credit is specific to the trip it came from — starts fresh
+      documents: [],   // travel documents are trip-instance-specific (expiry dates, scans) — start fresh, like Catch Log
+      bookings: [],    // same — a copy's bookings/confirmations are its own, not the original's
+      flights: [],     // same — a copy's flights are its own, not the original's
       _legacyAdminMigrated: true, // explicit admin assignment above — never subject to the legacy grandfather-in migration
     };
 
@@ -4244,9 +4352,9 @@ function renderTripScreen(){
     <div class="tabs">
       ${tabBtn('overview','🏠 Home')}
       ${tabBtn('itinerary','🗓️ Itinerary')}
+      ${tabBtn('documents','📄 Documents')}
       ${tabBtn('shopping','🛒 Shopping')}
       ${tabBtn('meals','🍽️ Meal Planner')}
-      ${tabBtn('costs','💰 Cost')}
       ${tabBtn('people','👥 People')}
     </div>
     <div class="panel" id="panel"></div>
@@ -4575,6 +4683,81 @@ function handlePhotoUpload(e, t){
   reader.readAsDataURL(file);
 }
 
+/* ---------- Travel Document scans ---------- */
+function handleDocumentUpload(e, t, docId){
+  if(!ADMIN) return;
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const docObj = findDocument(t, docId);
+  if(!docObj) return;
+  const isPdf = file.type === 'application/pdf';
+  if(!isPdf && !file.type.startsWith('image/')){ alert('Please choose an image or PDF file.'); return; }
+
+  async function finish(dataUrl){
+    const result = await backendUploadDocument(t.id, docObj.id, dataUrl);
+    if(!result.ok){
+      alert('Upload failed (' + result.error + '). Check the backend connection and try again.');
+      return;
+    }
+    docObj.fileUrl = result.url;
+    scheduleSave();
+    renderPanel();
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    if(isPdf){
+      finish(ev.target.result); // PDFs are uploaded as-is — no client-side resize possible
+      return;
+    }
+    const img = new Image();
+    img.onload = function(){
+      const MAX_DIM = 1400; // a bit larger than the cover photo so a scanned document stays legible
+      let w = img.width, h = img.height;
+      if(w > h && w > MAX_DIM){ h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+      else if(h > MAX_DIM){ w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      finish(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = function(){ alert('Could not read that image — try a different file.'); };
+    img.src = ev.target.result;
+  };
+  reader.onerror = function(){ alert('Could not read that file.'); };
+  reader.readAsDataURL(file);
+}
+
+/* ---------- Flight status (via Cloud Function -> AeroDataBox) ---------- */
+// The API key never touches this file — getFlightStatus is a Cloud Function
+// that holds it server-side. See functions/index.js.
+async function checkFlightStatus(t, flightId){
+  const f = findFlight(t, flightId);
+  if(!f) return;
+  if(!f.flightNumber || !f.date){ alert('Add a flight number and date first.'); return; }
+  f.status = 'Checking…';
+  renderPanel();
+  try{
+    const call = httpsCallable(functionsClient, 'getFlightStatus');
+    const res = await call({flightNumber: f.flightNumber, date: f.date});
+    const d = res.data || {};
+    if(d.found === false){
+      f.status = 'Not found';
+      f.statusDetail = null;
+    }else{
+      f.status = d.status || 'Unknown';
+      f.statusDetail = d;
+    }
+  }catch(e){
+    f.status = 'Check failed';
+    f.statusDetail = { error: String(e && e.message || e) };
+  }
+  f.statusCheckedAt = Date.now();
+  scheduleSave();
+  renderPanel();
+}
+
 /* ---------- Location ---------- */
 function editLocation(t){
   if(!ADMIN) return;
@@ -4597,9 +4780,9 @@ function renderPanel(){
   const t = state.trip;
   if(state.tab==='overview') panel.innerHTML = renderOverview(t);
   else if(state.tab==='people') panel.innerHTML = renderPeople(t);
-  else if(state.tab==='costs') panel.innerHTML = renderCosts(t);
   else if(state.tab==='meals') panel.innerHTML = renderMeals(t);
   else if(state.tab==='itinerary') panel.innerHTML = renderItinerary(t);
+  else if(state.tab==='documents') panel.innerHTML = renderDocuments(t);
   else if(state.tab==='shopping') panel.innerHTML = renderShopping(t);
 
   document.querySelectorAll('.tab').forEach(el=>{
@@ -4649,7 +4832,7 @@ function renderOverview(t){
             <div class="empty">
               <span class="empty-glyph">🏠</span>
               <div class="empty-title">Nothing to total up yet</div>
-              This fills in once you add <span class="empty-link jump-to-tab" data-tab="costs">cost lines</span>
+              This fills in once you add <span class="empty-link jump-to-tab" data-tab="people">cost lines</span>
               or <span class="empty-link jump-to-tab" data-tab="shopping">shopping items</span>.
             </div>
           </td></tr>`}
@@ -4784,7 +4967,71 @@ function renderPeople(t){
         ${moneyField('balance-forward-amount', t.balanceForward.amount||0, RO)}
       </div>
     </div>
+    ${renderCosts(t)}
     ${renderCatchLog(t)}
+  `;
+}
+
+/* ---------- Costs (toggleable, lives inside the People tab) ---------- */
+function renderCosts(t){
+  const RO = ADMIN ? '' : 'disabled';
+
+  if(!t.costsEnabled){
+    if(!ADMIN) return '';
+    return `
+      <div class="panel-section">
+        <div class="section-head"><h2>💰 Costs</h2></div>
+        <div class="section-note">Optional — track shared budget vs actual spend (accommodation, fuel, permits, etc). Off by default.</div>
+        <button class="btn ghost sm" id="btnEnableCosts">💰 Turn on Costs</button>
+      </div>
+    `;
+  }
+
+  const totals = costLinesTotals(t);
+  let rows = t.costs.map(c=>{
+    const variance = (Number(c.actual)||0)-(Number(c.budget)||0);
+    return `<tr data-cost="${c.id}">
+      <td class="wide-col" data-label="Item"><input type="text" class="cost-label" value="${escapeHtml(c.label)}" placeholder="e.g. Accommodation" ${RO}></td>
+      <td class="num" data-label="Budget">${moneyField('cost-budget', c.budget||0, RO)}</td>
+      <td class="num" data-label="Actual">${moneyField('cost-actual', c.actual||0, RO)}</td>
+      <td class="num ${variance>0?'neg':'pos'}" data-label="Variance">${variance>0?'+':''}${money(variance)}</td>
+      <td class="row-actions">${ADMIN?'<button class="del cost-del" title="Remove">✕</button>':''}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>💰 Cost (Budget and Actual Cost)</h2>
+        <div style="display:flex;gap:8px">
+          ${ADMIN?'<button class="btn ghost sm" id="addCost">+ Add cost line</button>':''}
+          ${ADMIN?'<button class="btn ghost sm" id="btnDisableCosts">Turn off</button>':''}
+        </div>
+      </div>
+      <div class="section-note">Accommodation, travel, permits, fuel, hire gear — anything that isn't a shopping-list item. Food/Alcohol/Misc show up automatically from your Shopping List.</div>
+      <div class="table-scroll">
+      <table>
+        <thead><tr><th class="wide-col">Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
+        <tbody>
+          ${rows || `<tr><td colspan="5">
+            <div class="empty">
+              <span class="empty-glyph">💰</span>
+              <div class="empty-title">No cost lines yet</div>
+              ${ADMIN
+                ? `Log the big shared costs here — accommodation, fuel, permits.<button class="btn ghost sm" id="addCostEmpty">+ Add first cost line</button>`
+                : `The trip admin hasn\u2019t added any costs yet.`}
+            </div>
+          </td></tr>`}
+          <tr class="subtotal">
+            <td>Subtotal</td>
+            <td class="num" data-label="Budget">${money(totals.budget)}</td>
+            <td class="num" data-label="Actual">${money(totals.actual)}</td>
+            <td class="num" data-label="Variance">${money(totals.actual-totals.budget)}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
   `;
 }
 
@@ -4863,55 +5110,200 @@ function renderCatchLog(t){
   `;
 }
 
-/* ---------- Trip Costs ---------- */
-function renderCosts(t){
+/* ---------- Travel Documents ---------- */
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  return Math.round((d.getTime() - new Date(new Date().toDateString()).getTime()) / 86400000);
+}
+function expiryBadge(dateStr){
+  if(!dateStr) return '';
+  const days = daysUntil(dateStr);
+  if(days === null) return '';
+  if(days < 0) return `<span class="access-badge danger">Expired</span>`;
+  if(days <= 182) return `<span class="access-badge soon">Expires in ${days<31?days+'d':Math.round(days/30)+'mo'}</span>`;
+  return `<span class="access-badge ok">Valid</span>`;
+}
+function personName(t, personId){
+  const p = t.people.find(p=>p.id===personId);
+  return p ? p.name : '';
+}
+function renderDocuments(t){
   const RO = ADMIN ? '' : 'disabled';
-  const totals = costLinesTotals(t);
-  let rows = t.costs.map(c=>{
-    const variance = (Number(c.actual)||0)-(Number(c.budget)||0);
-    return `<tr data-cost="${c.id}">
-      <td class="wide-col" data-label="Item"><input type="text" class="cost-label" value="${escapeHtml(c.label)}" placeholder="e.g. Accommodation" ${RO}></td>
-      <td class="num" data-label="Budget">${moneyField('cost-budget', c.budget||0, RO)}</td>
-      <td class="num" data-label="Actual">${moneyField('cost-actual', c.actual||0, RO)}</td>
-      <td class="num ${variance>0?'neg':'pos'}" data-label="Variance">${variance>0?'+':''}${money(variance)}</td>
-      <td class="row-actions">${ADMIN?'<button class="del cost-del" title="Remove">✕</button>':''}</td>
-    </tr>`;
+  const personOptions = (selectedId)=>`<option value="">— Whole group —</option>` +
+    t.people.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''}>${escapeHtml(p.name||'Unnamed')}</option>`).join('');
+
+  const docCards = t.documents.map(d=>{
+    const meta = DOCUMENT_TYPES[d.type] || DOCUMENT_TYPES.other;
+    return `
+    <div class="doc-card" data-document="${d.id}">
+      <div class="doc-card-head">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${d.fileUrl
+            ? `<img class="doc-thumb doc-view" src="${d.fileUrl}" title="View scan">`
+            : `<span class="doc-thumb-empty doc-upload-trigger" title="${ADMIN?'Add a photo/scan':'No scan attached'}">${meta.icon}</span>`}
+          <div>
+            <select class="doc-type" ${RO}>${Object.entries(DOCUMENT_TYPES).map(([k,v])=>`<option value="${k}" ${k===d.type?'selected':''}>${v.icon} ${v.label}</option>`).join('')}</select>
+          </div>
+        </div>
+        ${expiryBadge(d.expiryDate)}
+        ${ADMIN?'<button class="del doc-del" title="Remove document">✕</button>':''}
+      </div>
+      <div class="doc-card-grid">
+        <div class="doc-field"><label>Belongs to</label><select class="doc-person" ${RO}>${personOptions(d.personId)}</select></div>
+        <div class="doc-field"><label>Number</label><input type="text" class="doc-number" value="${escapeHtml(d.number||'')}" placeholder="e.g. last 4 digits" ${RO}></div>
+        <div class="doc-field"><label>Issuing country</label><input type="text" class="doc-country" value="${escapeHtml(d.country||'')}" placeholder="e.g. Australia" ${RO}></div>
+        <div class="doc-field"><label>Expiry date</label><input type="date" class="doc-expiry" value="${escapeHtml(d.expiryDate||'')}" ${RO}></div>
+        <div class="doc-field" style="grid-column:1/-1"><label>Notes</label><input type="text" class="doc-notes" value="${escapeHtml(d.notes||'')}" placeholder="Policy number, conditions, etc." ${RO}></div>
+      </div>
+      ${ADMIN ? `<input type="file" accept="image/*,.pdf" class="doc-file-input" style="display:none">` : ''}
+    </div>`;
   }).join('');
 
+  const bookingRows = t.bookings.map(b=>`
+    <tr data-booking="${b.id}">
+      <td class="wide-col" data-label="Booking"><input type="text" class="booking-label" value="${escapeHtml(b.label)}" placeholder="e.g. Airbnb — Straddie" ${RO}></td>
+      <td data-label="Provider"><input type="text" class="booking-provider" value="${escapeHtml(b.provider||'')}" placeholder="Provider" ${RO}></td>
+      <td data-label="Reference"><input type="text" class="booking-ref" value="${escapeHtml(b.refNumber||'')}" placeholder="Confirmation #" ${RO}></td>
+      <td data-label="From"><input type="date" class="booking-start" value="${escapeHtml(b.startDate||'')}" ${RO}></td>
+      <td data-label="To"><input type="date" class="booking-end" value="${escapeHtml(b.endDate||'')}" ${RO}></td>
+      <td class="row-actions">${ADMIN?'<button class="del booking-del" title="Remove booking">✕</button>':''}</td>
+    </tr>
+  `).join('');
+
   return `
+    <div class="panel-page-title">📄 Travel Documents</div>
     <div class="panel-section">
-      <div class="section-head"><h2>💰 Cost (Budget and Actual Cost)</h2>
-        ${ADMIN?'<button class="btn ghost sm" id="addCost">+ Add cost line</button>':''}
+      <div class="section-head"><h2>Documents &amp; ID</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addDocument">+ Add document</button>':''}
       </div>
-      <div class="section-note">Accommodation, travel, permits, fuel, hire gear — anything that isn't a shopping-list item. Food/Alcohol/Misc show up automatically from your Shopping List.</div>
+      <div class="section-note">Passports, visas, insurance, licences — kept here so nobody has to carry the paper copy. Expiry warnings show inside 6 months.</div>
+      ${docCards || `
+        <div class="empty">
+          <span class="empty-glyph">📄</span>
+          <div class="empty-title">No documents added yet</div>
+          ${ADMIN
+            ? `Add passports, visas, or insurance details for the group.<button class="btn ghost sm" id="addDocumentEmpty">+ Add first document</button>`
+            : `The trip admin hasn\u2019t added any documents yet.`}
+        </div>`}
+    </div>
+    <div class="panel-section">
+      <div class="section-head"><h2>Bookings &amp; Confirmations</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addBooking">+ Add booking</button>':''}
+      </div>
+      <div class="section-note">Accommodation, car hire, activity bookings — reference numbers in one place instead of loose emails.</div>
       <div class="table-scroll">
-      <table>
-        <thead><tr><th class="wide-col">Item</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th><th></th></tr></thead>
-        <tbody>
-          ${rows || `<tr><td colspan="5">
-            <div class="empty">
-              <span class="empty-glyph">💰</span>
-              <div class="empty-title">No cost lines yet</div>
-              ${ADMIN
-                ? `Log the big shared costs here — accommodation, fuel, permits.<button class="btn ghost sm" id="addCostEmpty">+ Add first cost line</button>`
-                : `The trip admin hasn\u2019t added any costs yet.`}
-            </div>
-          </td></tr>`}
-          <tr class="subtotal">
-            <td>Subtotal</td>
-            <td class="num" data-label="Budget">${money(totals.budget)}</td>
-            <td class="num" data-label="Actual">${money(totals.actual)}</td>
-            <td class="num" data-label="Variance">${money(totals.actual-totals.budget)}</td>
-            <td></td>
-          </tr>
-        </tbody>
+      <table class="stack-mobile">
+        <thead><tr><th class="wide-col">Booking</th><th>Provider</th><th>Reference</th><th>From</th><th>To</th><th></th></tr></thead>
+        <tbody>${bookingRows || `<tr><td colspan="6">
+          <div class="empty">
+            <span class="empty-glyph">🏨</span>
+            <div class="empty-title">No bookings logged yet</div>
+            ${ADMIN
+              ? `Log confirmation numbers so they\u2019re easy to find on the day.<button class="btn ghost sm" id="addBookingEmpty">+ Add first booking</button>`
+              : `The trip admin hasn\u2019t added any bookings yet.`}
+          </div>
+        </td></tr>`}</tbody>
       </table>
       </div>
     </div>
   `;
 }
 
+/* ---------- Flights ---------- */
+function flightStatusBadge(f){
+  if(!f.status) return `<span class="access-badge member">Not checked</span>`;
+  const s = f.status.toLowerCase();
+  if(s.includes('cancel')) return `<span class="access-badge danger">${escapeHtml(f.status)}</span>`;
+  if(s.includes('delay')) return `<span class="access-badge soon">${escapeHtml(f.status)}</span>`;
+  if(s.includes('not found') || s.includes('failed') || s.includes('unknown')) return `<span class="access-badge member">${escapeHtml(f.status)}</span>`;
+  return `<span class="access-badge ok">${escapeHtml(f.status)}</span>`;
+}
+function formatFlightTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+// Flags a flight whose scheduled departure follows the same person's
+// previous flight's scheduled arrival by less than 90 minutes. Only works
+// once "Check status" has been run on both legs, since that's the only
+// place real scheduled times come from — the free-text dep/arr fields
+// aren't structured enough to compare reliably.
+function computeConnectionRisks(t){
+  const risks = {};
+  const byPerson = {};
+  t.flights.forEach(f=>{
+    const key = f.personId || '__group__';
+    (byPerson[key] = byPerson[key] || []).push(f);
+  });
+  Object.values(byPerson).forEach(list=>{
+    const sorted = [...list].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    for(let i=0;i<sorted.length-1;i++){
+      const cur = sorted[i], next = sorted[i+1];
+      const curArr = cur.statusDetail && cur.statusDetail.arrivalScheduled;
+      const nextDep = next.statusDetail && next.statusDetail.departureScheduled;
+      if(!curArr || !nextDep) continue;
+      const diffMin = Math.round((new Date(nextDep).getTime() - new Date(curArr).getTime()) / 60000);
+      if(!isNaN(diffMin) && diffMin >= 0 && diffMin < 90){
+        risks[next.id] = diffMin;
+      }
+    }
+  });
+  return risks;
+}
+// Renders one flight as a compact card — used both for flights that land
+// inside a matching itinerary day, and for the "Unscheduled flights" strip.
+function renderFlightCard(t, f, risks){
+  const RO = ADMIN ? '' : 'disabled';
+  const d = f.statusDetail;
+  const detailRows = [];
+  if(d){
+    if(d.departureTerminal || d.departureGate) detailRows.push(`Departure: ${[d.departureTerminal?'Terminal '+escapeHtml(d.departureTerminal):'', d.departureGate?'Gate '+escapeHtml(d.departureGate):''].filter(Boolean).join(', ')}`);
+    if(d.departureScheduled) detailRows.push(`Scheduled departure: ${escapeHtml(formatFlightTime(d.departureScheduled))}`);
+    if(d.arrivalTerminal || d.arrivalGate) detailRows.push(`Arrival: ${[d.arrivalTerminal?'Terminal '+escapeHtml(d.arrivalTerminal):'', d.arrivalGate?'Gate '+escapeHtml(d.arrivalGate):''].filter(Boolean).join(', ')}`);
+    if(d.arrivalScheduled) detailRows.push(`Scheduled arrival: ${escapeHtml(formatFlightTime(d.arrivalScheduled))}`);
+  }
+  const risk = risks[f.id];
+  return `
+    <div class="doc-card flight-card" data-flight="${f.id}">
+      <div class="doc-card-head">
+        <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:20px">✈️</span>
+          <select class="flight-person" ${RO}>
+            <option value="">— Whole group —</option>
+            ${t.people.map(p=>`<option value="${p.id}" ${p.id===f.personId?'selected':''}>${escapeHtml(p.name||'Unnamed')}</option>`).join('')}
+          </select>
+        </div>
+        ${flightStatusBadge(f)}
+        ${ADMIN?'<button class="del flight-del" title="Remove flight">✕</button>':''}
+      </div>
+      <div class="doc-card-grid">
+        <div class="doc-field"><label>Airline</label><input type="text" class="flight-airline" value="${escapeHtml(f.airline||'')}" placeholder="e.g. Qantas" ${RO}></div>
+        <div class="doc-field"><label>Flight number</label><input type="text" class="flight-number" value="${escapeHtml(f.flightNumber||'')}" placeholder="e.g. QF430" ${RO} style="text-transform:uppercase"></div>
+        <div class="doc-field"><label>Date</label><input type="date" class="flight-date" value="${escapeHtml(f.date||'')}" ${RO}></div>
+        <div class="doc-field"><label>Booking ref</label><input type="text" class="flight-ref" value="${escapeHtml(f.bookingRef||'')}" placeholder="PNR" ${RO}></div>
+        <div class="doc-field"><label>Departs</label><input type="text" class="flight-dep" value="${escapeHtml(f.depAirport||'')}" placeholder="e.g. BNE 6:30am" ${RO}></div>
+        <div class="doc-field"><label>Arrives</label><input type="text" class="flight-arr" value="${escapeHtml(f.arrAirport||'')}" placeholder="e.g. SYD 8:00am" ${RO}></div>
+      </div>
+      ${detailRows.length ? `<div class="section-note" style="margin-top:8px;line-height:1.7">${detailRows.join('<br>')}</div>` : ''}
+      ${risk!==undefined ? `<div style="margin-top:8px"><span class="access-badge danger">⚠️ Tight connection — only ${risk} min after previous flight</span></div>` : ''}
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn ghost sm flight-check" data-flight-check="${f.id}">🔄 Check status</button>
+        ${f.statusCheckedAt ? `<span class="section-note" style="margin:0">Last checked ${new Date(f.statusCheckedAt).toLocaleString()}</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
 /* ---------- Meal Plan ---------- */
+// Deep-links out to Rome2Rio's multi-modal route search (flight/train/bus/
+// car/ferry) between two named locations — used on the Itinerary tab to
+// show "getting there" options between consecutive located activities.
+function rome2rioUrl(origin, destination){
+  const slug = s => encodeURIComponent(String(s).trim()).replace(/%20/g, '-');
+  return `https://www.rome2rio.com/s/${slug(origin)}/${slug(destination)}`;
+}
 function formatDayDate(dateStr){
   if(!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -4962,21 +5354,36 @@ function renderMeals(t){
 /* ---------- Itinerary ---------- */
 function renderItinerary(t){
   const RO = ADMIN ? '' : 'disabled';
+  const risks = computeConnectionRisks(t);
   function typeOptionsFor(selectedType){
     return Object.entries(ACTIVITY_TYPES).map(([k,v])=>
       `<option value="${k}" ${k===selectedType?'selected':''}>${v.icon} ${v.label}</option>`
     ).join('');
   }
+  // Every day's real calendar date, so flights can be matched to the day
+  // they're on. Flights whose date doesn't match any day (or have no date
+  // yet) fall into the "Unscheduled flights" strip instead of vanishing.
+  const dayDates = t.days.map((d,i)=> t.startDate ? dayDateFor(t,i) : '');
+  const matchedFlightIds = new Set();
   const dayGroups = t.days.map((d,i)=>{
     const acts = activitiesForDay(t, d.id);
-    const dateStr = t.startDate ? dayDateFor(t,i) : '';
+    const dateStr = dayDates[i];
     const headerLabel = dateStr ? formatDayDateLong(dateStr) : d.label;
+    let lastLocatedName = '';
+
+    const dayFlights = dateStr ? t.flights.filter(f=>f.date===dateStr) : [];
+    dayFlights.forEach(f=>matchedFlightIds.add(f.id));
+    const flightCards = dayFlights.map(f=>renderFlightCard(t, f, risks)).join('');
 
     const rows = acts.map((a,idx)=>{
       const meta = ACTIVITY_TYPES[a.type] || ACTIVITY_TYPES.activity;
       const mapsUrl = a.location && a.location.name
         ? (a.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a.location.name)))
         : '';
+      const routeUrl = (a.location && a.location.name && lastLocatedName && lastLocatedName !== a.location.name)
+        ? rome2rioUrl(lastLocatedName, a.location.name) : '';
+      const routeOrigin = lastLocatedName;
+      if(a.location && a.location.name) lastLocatedName = a.location.name;
       return `
       <div class="itin-row" data-activity="${a.id}">
         <div class="itin-time-col">
@@ -5003,6 +5410,7 @@ function renderItinerary(t){
           <div class="itin-loc-row" style="position:relative">
             <input type="text" class="activity-location itin-loc-input" value="${escapeHtml(a.location?a.location.name:'')}" placeholder="📍 Location (optional)" autocomplete="off" ${RO}>
             ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="activity-map-link" title="Open in Google Maps">🗺️</a>` : ''}
+            ${routeUrl ? `<a href="${escapeHtml(routeUrl)}" target="_blank" rel="noopener" class="activity-map-link activity-route-link" title="Getting there from ${escapeHtml(routeOrigin)} (Rome2Rio — flight/train/bus/car/ferry options)">🧭</a>` : ''}
             <div class="place-suggestions" hidden></div>
           </div>
           <textarea class="activity-notes itin-notes-input" rows="1" placeholder="Notes (optional)" ${RO}>${escapeHtml(a.notes||'')}</textarea>
@@ -5013,6 +5421,7 @@ function renderItinerary(t){
     return `
     <div class="itin-day-group" data-day="${d.id}">
       <div class="itin-date-header">${escapeHtml(headerLabel)}</div>
+      ${flightCards ? `<div class="itin-flights-wrap" style="margin-bottom:10px">${flightCards}</div>` : ''}
       <div class="itin-rows-wrap">
         ${rows || `<div class="empty" style="padding:14px 0 14px 60px;font-size:12px;">Nothing planned yet.</div>`}
       </div>
@@ -5021,10 +5430,29 @@ function renderItinerary(t){
   `;
   }).join('');
 
+  const unscheduledFlights = t.flights.filter(f=>!matchedFlightIds.has(f.id));
+  const unscheduledCards = unscheduledFlights.map(f=>renderFlightCard(t, f, risks)).join('');
+
   return `
+    <div class="panel-page-title">🗓️ Itinerary</div>
     <div class="panel-section">
-      <div class="section-head"><h2>🗓️ Itinerary</h2></div>
-      <div class="section-note">Your trip timeline — flights, check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
+      <div class="section-head"><h2>✈️ Flights</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addFlight">+ Add flight</button>':''}
+      </div>
+      <div class="section-note">Flights with a date matching a trip day show inside that day's timeline below. Anything without a matching date shows here instead. Hit "Check status" on each for live delay/cancellation info.</div>
+      ${unscheduledCards || (t.flights.length
+        ? `<div class="section-note" style="margin:0">All flights are matched to a day below.</div>`
+        : `<div class="empty">
+            <span class="empty-glyph">✈️</span>
+            <div class="empty-title">No flights added yet</div>
+            ${ADMIN
+              ? `Add everyone\u2019s flights so the group can see delays at a glance.<button class="btn ghost sm" id="addFlightEmpty">+ Add first flight</button>`
+              : `The trip admin hasn\u2019t added any flights yet.`}
+          </div>`)}
+    </div>
+    <div class="panel-section">
+      <div class="section-head"><h2>Day-by-day</h2></div>
+      <div class="section-note">Your trip timeline — check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
       <div class="itinerary-timeline">
         ${dayGroups || `<div class="empty">
           <span class="empty-glyph">🗓️</span>
@@ -5175,6 +5603,16 @@ function bindPanelEvents(){
     }
   });
 
+  // COSTS toggle
+  id('btnEnableCosts') && id('btnEnableCosts').addEventListener('click', ()=>{
+    t.costsEnabled = true; scheduleSave(); renderPanel();
+  });
+  id('btnDisableCosts') && id('btnDisableCosts').addEventListener('click', ()=>{
+    if(confirm('Turn off Costs for this trip? Any cost lines already entered are kept, just hidden.')){
+      t.costsEnabled = false; scheduleSave(); renderPanel();
+    }
+  });
+
   // PEOPLE
   qa('.person-name').forEach(el=>el.addEventListener('input', e=>{
     findPerson(t, rowId(e)).name = e.target.value; scheduleSave();
@@ -5243,6 +5681,102 @@ function bindPanelEvents(){
   const addCostHandler = ()=>{ t.costs.push({id:uid(), label:'New cost', budget:0, actual:0}); scheduleSave(); renderPanel(); };
   id('addCost') && id('addCost').addEventListener('click', addCostHandler);
   id('addCostEmpty') && id('addCostEmpty').addEventListener('click', addCostHandler);
+
+  // DOCUMENTS
+  qa('.doc-type').forEach(el=>el.addEventListener('change', e=>{
+    findDocument(t, rowId(e,'document')).type = e.target.value; scheduleSave(); renderPanel();
+  }));
+  qa('.doc-person').forEach(el=>el.addEventListener('change', e=>{
+    findDocument(t, rowId(e,'document')).personId = e.target.value; scheduleSave();
+  }));
+  qa('.doc-number').forEach(el=>el.addEventListener('input', e=>{
+    findDocument(t, rowId(e,'document')).number = e.target.value; scheduleSave();
+  }));
+  qa('.doc-country').forEach(el=>el.addEventListener('input', e=>{
+    findDocument(t, rowId(e,'document')).country = e.target.value; scheduleSave();
+  }));
+  qa('.doc-expiry').forEach(el=>el.addEventListener('change', e=>{
+    findDocument(t, rowId(e,'document')).expiryDate = e.target.value; scheduleSave(); renderPanel();
+  }));
+  qa('.doc-notes').forEach(el=>el.addEventListener('input', e=>{
+    findDocument(t, rowId(e,'document')).notes = e.target.value; scheduleSave();
+  }));
+  qa('.doc-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e,'document');
+    if(confirm('Remove this document?')){ t.documents = t.documents.filter(d=>d.id!==idv); scheduleSave(); renderPanel(); }
+  }));
+  qa('.doc-view').forEach(el=>el.addEventListener('click', e=>{
+    const doc = findDocument(t, rowId(e,'document'));
+    if(doc && doc.fileUrl) window.open(doc.fileUrl, '_blank', 'noopener');
+  }));
+  qa('.doc-upload-trigger').forEach(el=>{
+    if(!ADMIN) return;
+    el.addEventListener('click', ()=>{
+      const card = el.closest('[data-document]');
+      const input = card && card.querySelector('.doc-file-input');
+      if(input) input.click();
+    });
+  });
+  qa('.doc-file-input').forEach(el=>el.addEventListener('change', e=>handleDocumentUpload(e, t, rowId(e,'document'))));
+  const addDocumentHandler = ()=>{ t.documents.push({id:uid(), personId:'', type:'passport', number:'', country:'', expiryDate:'', notes:'', fileUrl:null}); scheduleSave(); renderPanel(); };
+  id('addDocument') && id('addDocument').addEventListener('click', addDocumentHandler);
+  id('addDocumentEmpty') && id('addDocumentEmpty').addEventListener('click', addDocumentHandler);
+
+  // BOOKINGS
+  qa('.booking-label').forEach(el=>el.addEventListener('input', e=>{
+    findBooking(t, rowId(e,'booking')).label = e.target.value; scheduleSave();
+  }));
+  qa('.booking-provider').forEach(el=>el.addEventListener('input', e=>{
+    findBooking(t, rowId(e,'booking')).provider = e.target.value; scheduleSave();
+  }));
+  qa('.booking-ref').forEach(el=>el.addEventListener('input', e=>{
+    findBooking(t, rowId(e,'booking')).refNumber = e.target.value; scheduleSave();
+  }));
+  qa('.booking-start').forEach(el=>el.addEventListener('change', e=>{
+    findBooking(t, rowId(e,'booking')).startDate = e.target.value; scheduleSave();
+  }));
+  qa('.booking-end').forEach(el=>el.addEventListener('change', e=>{
+    findBooking(t, rowId(e,'booking')).endDate = e.target.value; scheduleSave();
+  }));
+  qa('.booking-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e,'booking'); t.bookings = t.bookings.filter(b=>b.id!==idv); scheduleSave(); renderPanel();
+  }));
+  const addBookingHandler = ()=>{ t.bookings.push({id:uid(), label:'New booking', provider:'', refNumber:'', startDate:'', endDate:'', notes:''}); scheduleSave(); renderPanel(); };
+  id('addBooking') && id('addBooking').addEventListener('click', addBookingHandler);
+  id('addBookingEmpty') && id('addBookingEmpty').addEventListener('click', addBookingHandler);
+
+  // FLIGHTS
+  qa('.flight-person').forEach(el=>el.addEventListener('change', e=>{
+    findFlight(t, rowId(e,'flight')).personId = e.target.value; scheduleSave();
+  }));
+  qa('.flight-airline').forEach(el=>el.addEventListener('input', e=>{
+    findFlight(t, rowId(e,'flight')).airline = e.target.value; scheduleSave();
+  }));
+  qa('.flight-number').forEach(el=>el.addEventListener('input', e=>{
+    findFlight(t, rowId(e,'flight')).flightNumber = e.target.value.toUpperCase(); scheduleSave();
+  }));
+  qa('.flight-date').forEach(el=>el.addEventListener('change', e=>{
+    findFlight(t, rowId(e,'flight')).date = e.target.value; scheduleSave();
+  }));
+  qa('.flight-ref').forEach(el=>el.addEventListener('input', e=>{
+    findFlight(t, rowId(e,'flight')).bookingRef = e.target.value; scheduleSave();
+  }));
+  qa('.flight-dep').forEach(el=>el.addEventListener('input', e=>{
+    findFlight(t, rowId(e,'flight')).depAirport = e.target.value; scheduleSave();
+  }));
+  qa('.flight-arr').forEach(el=>el.addEventListener('input', e=>{
+    findFlight(t, rowId(e,'flight')).arrAirport = e.target.value; scheduleSave();
+  }));
+  qa('.flight-del').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e,'flight');
+    if(confirm('Remove this flight?')){ t.flights = t.flights.filter(f=>f.id!==idv); scheduleSave(); renderPanel(); }
+  }));
+  qa('.flight-check').forEach(el=>el.addEventListener('click', e=>{
+    checkFlightStatus(t, e.target.dataset.flightCheck);
+  }));
+  const addFlightHandler = ()=>{ t.flights.push({id:uid(), personId:'', airline:'', flightNumber:'', date: t.startDate||'', depAirport:'', arrAirport:'', bookingRef:'', status:'', statusDetail:null, statusCheckedAt:null}); scheduleSave(); renderPanel(); };
+  id('addFlight') && id('addFlight').addEventListener('click', addFlightHandler);
+  id('addFlightEmpty') && id('addFlightEmpty').addEventListener('click', addFlightHandler);
 
   // MEALS
   qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
@@ -5382,47 +5916,60 @@ function findCost(t,id){ return t.costs.find(c=>c.id===id); }
 function findDay(t,id){ return t.days.find(d=>d.id===id); }
 function findItem(t,id){ return t.shopping.find(i=>i.id===id); }
 function findActivity(t,id){ return t.activities.find(a=>a.id===id); }
+function findDocument(t,id){ return t.documents.find(d=>d.id===id); }
+function findBooking(t,id){ return t.bookings.find(b=>b.id===id); }
+function findFlight(t,id){ return t.flights.find(f=>f.id===id); }
 
 /* ============================= Identity gate ============================= */
 function renderIdentityGate(){
   const isSignup = state.authMode === 'signup';
   return `
-    <div class="modal-backdrop" id="identityBackdrop">
-      <div class="modal">
-        <h2>${isSignup ? 'Create your account' : 'Sign in'}</h2>
-        <div class="section-note" style="margin-bottom:16px">
-          ${isSignup
-            ? 'This name is what\u2019s matched against trips and access levels — use the same one you (or your trip admin) already use.'
-            : 'Sign in to see your trips.'}
+    <div class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <span class="auth-logo-mark">🎣</span>
+          <span class="auth-logo-word">trip-ledger</span>
         </div>
+        <div class="auth-heading">${isSignup ? 'Create your<br>Trip-Ledger account' : 'Log into your<br>Trip-Ledger account'}</div>
         ${isSignup ? `
-        <div class="field">
-          <label>Full name</label>
+        <div class="auth-field">
+          <label for="authName">Full name</label>
           <input type="text" id="authName" placeholder="e.g. Vikash Deo">
+          <div class="section-note" style="margin-top:6px">This name is matched against trips and access levels — use the same one your trip admin already has for you.</div>
         </div>` : ''}
-        <div class="field">
-          <label>Email</label>
+        <div class="auth-field">
+          <label for="authEmail">Email address</label>
           <input type="email" id="authEmail" placeholder="you@example.com">
         </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="authPassword" placeholder="At least 6 characters">
+        <div class="auth-field">
+          <label for="authPassword">Password</label>
+          <div class="auth-password-wrap">
+            <input type="password" id="authPassword" placeholder="At least 6 characters">
+            <button type="button" class="auth-password-toggle" id="authPasswordToggle" title="Show/hide password">👁️</button>
+          </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn" id="authSubmit">${isSignup ? 'Create account' : 'Sign in'}</button>
-        </div>
-        <div id="authStatus" class="section-note" style="margin-top:10px"></div>
-        <div class="section-note" style="margin-top:16px;text-align:center">
-          <a href="#" id="authToggleMode">${isSignup ? 'Already have an account? Sign in' : 'New here? Create an account'}</a>
-          <br><a href="#" id="authForgotPassword" style="display:inline-block;margin-top:6px">Forgot password?</a>
+        ${!isSignup ? `<a href="#" id="authForgotPassword" class="auth-forgot">I forgot my password</a>` : '<div style="margin-bottom:6px"></div>'}
+        <button class="auth-submit" id="authSubmit">${isSignup ? 'Create account' : 'Log in'}</button>
+        <div id="authStatus" class="auth-status"></div>
+        <div class="auth-switch">
+          ${isSignup ? `Already have an account?<br><a href="#" id="authToggleMode">Sign in</a>` : `Don\u2019t have an account?<br><a href="#" id="authToggleMode">Sign up now</a>`}
         </div>
       </div>
     </div>
   `;
 }
 function bindIdentityGate(){
+  stopVerifyPolling(); // safety net — in case we land here with a leftover poll from the verify gate
   const statusEl = document.getElementById('authStatus');
   const setStatus = (msg, isError)=>{ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--danger)' : 'var(--ink-soft)'; };
+
+  const pwToggle = document.getElementById('authPasswordToggle');
+  if(pwToggle) pwToggle.addEventListener('click', ()=>{
+    const pw = document.getElementById('authPassword');
+    const showing = pw.type === 'text';
+    pw.type = showing ? 'password' : 'text';
+    pwToggle.textContent = showing ? '👁️' : '🙈';
+  });
 
   document.getElementById('authToggleMode').addEventListener('click', (e)=>{
     e.preventDefault();
@@ -5497,17 +6044,22 @@ function authErrorMessage(e){
 function renderVerifyEmailGate(){
   const email = escapeHtml((state.authUser && state.authUser.email) || '');
   return `
-    <div class="modal-backdrop" id="verifyBackdrop">
-      <div class="modal">
-        <h2>Check your email</h2>
-        <div class="section-note" style="margin-bottom:16px">
-          We sent a verification link to <b>${email}</b>. Click it, then come back here and continue.
+    <div class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <span class="auth-logo-mark">🎣</span>
+          <span class="auth-logo-word">trip-ledger</span>
         </div>
-        <div class="modal-actions">
-          <button class="btn" id="verifyCheckAgain">I've verified — continue</button>
+        <div class="auth-heading">Check your email</div>
+        <div class="section-note" style="margin-bottom:22px;text-align:center">
+          We sent a verification link to <b>${email}</b>. Click it — this page checks automatically every
+          few seconds and continues on its own once it comes through, no need to click back manually.
+          If it's taking a while, check your spam/junk folder — Firebase's verification emails sometimes
+          land there.
         </div>
-        <div id="verifyStatus" class="section-note" style="margin-top:10px"></div>
-        <div class="section-note" style="margin-top:16px;text-align:center">
+        <button class="auth-submit" id="verifyCheckAgain">I've verified — continue</button>
+        <div id="verifyStatus" class="auth-status"></div>
+        <div class="auth-switch">
           <a href="#" id="verifyResend">Resend verification email</a>
           &nbsp;&middot;&nbsp;
           <a href="#" id="verifySignOut">Use a different account</a>
@@ -5516,24 +6068,52 @@ function renderVerifyEmailGate(){
     </div>
   `;
 }
+// Auto-poll handle for the verify-email gate — module-level so it can be torn
+// down from anywhere (a fresh render of this same gate, leaving it via sign
+// out, or successfully verifying) without leaking a timer or a stale listener.
+let verifyPollTimer = null;
+let verifyVisibilityHandler = null;
+function stopVerifyPolling(){
+  if(verifyPollTimer){ clearInterval(verifyPollTimer); verifyPollTimer = null; }
+  if(verifyVisibilityHandler){ document.removeEventListener('visibilitychange', verifyVisibilityHandler); verifyVisibilityHandler = null; }
+}
 function bindVerifyEmailGate(){
+  stopVerifyPolling(); // in case this gate is being re-bound (e.g. after "Resend")
   const statusEl = document.getElementById('verifyStatus');
   const setStatus = (msg, isError)=>{ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--danger)' : 'var(--ink-soft)'; };
+
+  // silent=true: used by the background poll and the tab-refocus check —
+  // those shouldn't show "still not verified" errors on every failed check,
+  // only the explicit button click should.
+  async function checkVerified(silent){
+    try{
+      await reload(auth.currentUser);
+      if(auth.currentUser && auth.currentUser.emailVerified){
+        stopVerifyPolling();
+        await handleAuthStateChange(auth.currentUser);
+        return true;
+      }
+    }catch(e){
+      if(!silent) setStatus(authErrorMessage(e), true);
+    }
+    return false;
+  }
+
+  // Checks every few seconds so verifying on a phone (or in another tab)
+  // moves the app forward on its own — no need to remember to come back and
+  // click the button. Also re-checks immediately whenever this tab regains
+  // focus, which is the common case (verify in the email app, switch back).
+  verifyPollTimer = setInterval(()=>checkVerified(true), 4000);
+  verifyVisibilityHandler = ()=>{ if(document.visibilityState === 'visible') checkVerified(true); };
+  document.addEventListener('visibilitychange', verifyVisibilityHandler);
 
   document.getElementById('verifyCheckAgain').addEventListener('click', async ()=>{
     const btn = document.getElementById('verifyCheckAgain');
     btn.disabled = true;
     setStatus('Checking…', false);
-    try{
-      await withTimeout(reload(auth.currentUser), 'Checking verification status');
-      if(auth.currentUser.emailVerified){
-        await handleAuthStateChange(auth.currentUser);
-      } else {
-        setStatus('Still not verified — click the link in the email first, then try again.', true);
-        btn.disabled = false;
-      }
-    }catch(e){
-      setStatus(authErrorMessage(e), true);
+    const verified = await checkVerified(false);
+    if(!verified){
+      setStatus('Still not verified — click the link in the email first, then try again.', true);
       btn.disabled = false;
     }
   });
@@ -5548,6 +6128,7 @@ function bindVerifyEmailGate(){
   });
   document.getElementById('verifySignOut').addEventListener('click', async (e)=>{
     e.preventDefault();
+    stopVerifyPolling();
     await clearIdentity();
   });
 }
@@ -6009,6 +6590,7 @@ function applyImport(t, data){
   if(data.currency && CURRENCIES[String(data.currency).toUpperCase()]) t.currency = String(data.currency).toUpperCase();
   if(data.startDate !== undefined) t.startDate = String(data.startDate||'');
   if(data.catchLogEnabled !== undefined) t.catchLogEnabled = !!data.catchLogEnabled;
+  if(data.costsEnabled !== undefined) t.costsEnabled = !!data.costsEnabled;
   if(data.location){
     t.location = {name: data.location.name||'', mapsUrl: data.location.mapsUrl||''};
   }
