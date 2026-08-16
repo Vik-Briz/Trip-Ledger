@@ -3803,6 +3803,39 @@ function roleAbbreviations(roles){
 /* ============================= Persistence ============================= */
 let saveTimer = null;
 let sizeWarned = false;
+// Prevents a very real data-loss bug: since saves are a full-document
+// overwrite (no live listeners — see the top-of-file Firestore note), a
+// browser tab that's been open since BEFORE someone else joined this trip
+// (e.g. via QR code, on another device) would otherwise silently erase
+// that person the next time this tab autosaves anything at all — its
+// in-memory copy of `people`/`memberUids` predates their join, and a full
+// overwrite doesn't know they exist. This does one extra read right before
+// every save specifically to union in anyone the server has that this
+// tab doesn't, so a save from a stale tab can shrink the member list but
+// never silently lose someone who joined elsewhere in the meantime.
+async function mergeInNewMembersBeforeSave(tripId, localPeople, localMemberUids){
+  try{
+    const serverDoc = await backendGet('trip:'+tripId);
+    if(!serverDoc.ok || !serverDoc.value) return {people: localPeople, memberUids: localMemberUids};
+    const serverPeople = Array.isArray(serverDoc.value.people) ? serverDoc.value.people : [];
+    const serverMemberUids = Array.isArray(serverDoc.value.memberUids) ? serverDoc.value.memberUids : [];
+    const localIds = new Set(localPeople.map(p=>p.id));
+    const localNames = new Set(localPeople.map(p=>String(p.name||'').trim().toLowerCase()));
+    // Matched by id primarily; name as a fallback, since someone added on
+    // another device gets their own fresh id that this tab never saw.
+    const missingFromLocal = serverPeople.filter(p =>
+      p && !localIds.has(p.id) && !localNames.has(String(p.name||'').trim().toLowerCase())
+    );
+    const mergedPeople = missingFromLocal.length ? [...localPeople, ...missingFromLocal] : localPeople;
+    const mergedMemberUids = [...new Set([...(localMemberUids||[]), ...serverMemberUids])];
+    return {people: mergedPeople, memberUids: mergedMemberUids};
+  }catch(e){
+    // If the check itself fails (offline, etc.), don't block the save —
+    // fall back to saving what this tab already has rather than losing
+    // the edit entirely.
+    return {people: localPeople, memberUids: localMemberUids};
+  }
+}
 function scheduleSave(){
   if(!ADMIN || !state.trip) return;
   clearTimeout(saveTimer);
@@ -3810,7 +3843,21 @@ function scheduleSave(){
                                     // the timer fires, we must still save THIS trip's
                                     // edit to THIS trip's id, not whatever trip is
                                     // active when the timer happens to go off.
-  saveTimer = setTimeout(()=>{
+  saveTimer = setTimeout(async ()=>{
+    const merged = await mergeInNewMembersBeforeSave(tripSnapshot.id, tripSnapshot.people, tripSnapshot.memberUids);
+    tripSnapshot.people = merged.people;
+    tripSnapshot.memberUids = merged.memberUids;
+    // If this is still the trip currently open in THIS tab, reflect the
+    // merge in what's on screen too — otherwise anyone who joined
+    // elsewhere would only appear after a manual refresh, even though
+    // they're now safely saved.
+    if(state.trip && state.trip.id === tripSnapshot.id && state.trip !== tripSnapshot){
+      state.trip.people = merged.people;
+      state.trip.memberUids = merged.memberUids;
+    }
+    if(state.trip && state.trip.id === tripSnapshot.id && state.screen === 'trip'){
+      renderPanel();
+    }
     const size = JSON.stringify(tripSnapshot).length;
     if(size > 45000){
       if(!sizeWarned){
@@ -4112,6 +4159,34 @@ function openTrip(id){
   storeSet('last-trip-id', id, false); // local convenience only, not relied on for navigation anymore
   render();
 }
+// Manually pulls the latest saved copy of the CURRENTLY OPEN trip from
+// Firestore — the app has no live listeners (see the Firestore setup note
+// near the top of this file), so this is the only way to see an edit made
+// on another device/tab without closing and reopening the trip. Stays on
+// whatever tab you're currently viewing, rather than resetting to Overview
+// the way opening the trip fresh does.
+async function refreshCurrentTrip(){
+  if(!state.trip) return;
+  const id = state.trip.id;
+  const btn = document.getElementById('btnRefreshTrip');
+  const originalText = btn ? btn.textContent : '';
+  if(btn){ btn.textContent = '🔄 Refreshing…'; btn.style.pointerEvents = 'none'; }
+  try{
+    const fresh = await storeGet('trip:'+id, true);
+    if(fresh){
+      ensureTripShape(fresh);
+      state.plansCache[id] = fresh;
+      state.trip = fresh;
+      computeAdminForOpenTrip();
+      render();
+      return; // render() rebuilds the button, no need to restore its label below
+    }
+  }catch(e){
+    // fall through to restoring the button — a failed refresh just means
+    // "try again," not something worth interrupting the person over
+  }
+  if(btn){ btn.textContent = originalText; btn.style.pointerEvents = ''; }
+}
 function backToPlans(){
   state.trip = null;
   ADMIN = DEVELOPER; // no specific trip is open — outside a trip, only Developer counts as "admin"
@@ -4385,6 +4460,7 @@ function renderTripScreen(){
       ${renderIdentityBadge(true)}
       <div class="back-to-plans-row">
         <span class="loc-add" id="btnBackToPlans">← My Plans</span>
+        <span class="loc-add" id="btnRefreshTrip" style="margin-left:14px" title="Pull the latest saved data for this trip — useful right after someone else joins or edits on another device">🔄 Refresh</span>
         ${ADMIN ? `<span class="loc-add" id="btnTripAccount" style="margin-left:14px">👤 Account</span>` : ''}
       </div>
       <div class="tag-left">
@@ -4437,6 +4513,7 @@ function renderTripScreen(){
   `;
 
   document.getElementById('btnBackToPlans').addEventListener('click', backToPlans);
+  document.getElementById('btnRefreshTrip').addEventListener('click', refreshCurrentTrip);
   if(ADMIN){
     const tripAccountLink = document.getElementById('btnTripAccount');
     if(tripAccountLink) tripAccountLink.addEventListener('click', ()=>{
