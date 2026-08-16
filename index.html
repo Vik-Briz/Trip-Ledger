@@ -3397,6 +3397,24 @@ const state = {
 // Recomputed every time a different trip is opened (see openTrip()), NOT a
 // fixed global flag like it used to be. DEVELOPER is still global.
 let ADMIN = false;
+// Tracks, per trip id, which people this TAB already knew about the last
+// time it loaded/refreshed that trip's data — separate from the trip
+// object itself so it never gets serialized into what's saved to
+// Firestore. This is what lets the save-time merge (see
+// mergeInNewMembersBeforeSave) tell "this person is missing locally
+// because they were just deliberately deleted" apart from "this person is
+// missing locally because this tab has never heard of them" (e.g. someone
+// who joined via QR code on another device after this tab was opened) —
+// both look identical as a simple "on the server but not in my copy"
+// check, but only one of them should ever be silently restored.
+const knownPeopleBaselines = {};
+function setKnownPeopleBaseline(trip){
+  if(!trip) return;
+  knownPeopleBaselines[trip.id] = {
+    ids: new Set((trip.people||[]).map(p=>p.id)),
+    names: new Set((trip.people||[]).map(p=>String(p.name||'').trim().toLowerCase()).filter(Boolean)),
+  };
+}
 let DEVELOPER = false;
 let ACCESS_LEVEL = 'member';
 
@@ -3416,6 +3434,41 @@ function computeGlobalLevel(){
 // requirement for everyone, Developer included (no automatic bypass).
 // The ONE exception is Developer's explicit, visible Maintenance Mode
 // toggle — off by default every session, only for deliberate troubleshooting.
+// Used ONLY to resolve a mismatched signup name against a person an admin
+// already pre-typed into the trip (e.g. admin typed "Ronita Deo", but the
+// account created at signup is "Ronita d") — NOT used for the actual
+// admin/access checks (canEditTrip etc. below stay exact-match, since a
+// wrong guess there could misattribute trip-admin rights to the wrong
+// person). Deliberately conservative: the first name/token must match
+// exactly always — only the second token is ever fuzzed (full match, one
+// is a single-letter initial of the other, or one side has no second
+// token at all). This is intentionally narrow — "Sarah Doyle" and "Sarah
+// Deo" do NOT match here, since neither surname is an initial of the
+// other, only genuinely close variants of the same name do.
+function normalizeNameForMatch(name){
+  return String(name||'').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function namesLooselyMatch(a, b){
+  const na = normalizeNameForMatch(a), nb = normalizeNameForMatch(b);
+  if(!na || !nb) return false;
+  if(na === nb) return true;
+  const ta = na.split(' '), tb = nb.split(' ');
+  if(ta[0] !== tb[0]) return false; // first name must always match exactly
+  if(ta.length === 1 || tb.length === 1) return true; // "Ronita" vs "Ronita Deo"
+  const la = ta[1], lb = tb[1];
+  if(la === lb) return true;
+  if(la.length === 1 && lb.startsWith(la)) return true; // "Ronita D" vs "Ronita Deo"
+  if(lb.length === 1 && la.startsWith(lb)) return true; // "Ronita Deo" vs "Ronita D"
+  return false;
+}
+// The current signed-in user's own row in this trip's People list, if
+// any — used to check pending-approval status (below) without yet another
+// ad-hoc name-matching inline.
+function myPersonInTrip(trip){
+  if(!trip || !state.identity) return null;
+  const myName = String(state.identity.name||'').trim().toLowerCase();
+  return trip.people.find(p=>String(p.name||'').trim().toLowerCase()===myName) || null;
+}
 function canEditTrip(trip){
   if(DEVELOPER && state.developerMaintenanceMode) return true;
   if(!trip || !state.identity) return false;
@@ -3811,22 +3864,38 @@ let sizeWarned = false;
 // in-memory copy of `people`/`memberUids` predates their join, and a full
 // overwrite doesn't know they exist. This does one extra read right before
 // every save specifically to union in anyone the server has that this
-// tab doesn't, so a save from a stale tab can shrink the member list but
-// never silently lose someone who joined elsewhere in the meantime.
+// tab doesn't — but ONLY if this tab never knew about them in the first
+// place (tracked via knownPeopleBaselines). Someone who WAS known and is
+// now missing locally was deliberately deleted — restoring them would
+// silently undo that deletion, which is exactly the opposite of what this
+// safeguard is for.
 async function mergeInNewMembersBeforeSave(tripId, localPeople, localMemberUids){
   try{
     const serverDoc = await backendGet('trip:'+tripId);
     if(!serverDoc.ok || !serverDoc.value) return {people: localPeople, memberUids: localMemberUids};
     const serverPeople = Array.isArray(serverDoc.value.people) ? serverDoc.value.people : [];
     const serverMemberUids = Array.isArray(serverDoc.value.memberUids) ? serverDoc.value.memberUids : [];
+    const baseline = knownPeopleBaselines[tripId] || {ids:new Set(), names:new Set()};
     const localIds = new Set(localPeople.map(p=>p.id));
     const localNames = new Set(localPeople.map(p=>String(p.name||'').trim().toLowerCase()));
-    // Matched by id primarily; name as a fallback, since someone added on
-    // another device gets their own fresh id that this tab never saw.
-    const missingFromLocal = serverPeople.filter(p =>
-      p && !localIds.has(p.id) && !localNames.has(String(p.name||'').trim().toLowerCase())
-    );
+    // Only truly-new-to-this-tab people qualify: on the server, not in this
+    // tab's current copy, AND not in what this tab knew when it last
+    // loaded/refreshed either — that last condition is what excludes a
+    // just-deleted person from being resurrected.
+    const missingFromLocal = serverPeople.filter(p => {
+      if(!p) return false;
+      if(localIds.has(p.id) || baseline.ids.has(p.id)) return false;
+      const nameKey = String(p.name||'').trim().toLowerCase();
+      if(nameKey && (localNames.has(nameKey) || baseline.names.has(nameKey))) return false;
+      return true;
+    });
     const mergedPeople = missingFromLocal.length ? [...localPeople, ...missingFromLocal] : localPeople;
+    // memberUids is intentionally still a full union, not baseline-filtered
+    // — it's an access-control list, not something a person edits directly
+    // by removing a row, so there's no "deliberate removal" case to
+    // preserve here the way there is for `people`. Someone's uid should
+    // only ever be removed from it by the explicit remove-member action,
+    // which already updates it directly (see the person-del handler).
     const mergedMemberUids = [...new Set([...(localMemberUids||[]), ...serverMemberUids])];
     return {people: mergedPeople, memberUids: mergedMemberUids};
   }catch(e){
@@ -3858,6 +3927,11 @@ function scheduleSave(){
     if(state.trip && state.trip.id === tripSnapshot.id && state.screen === 'trip'){
       renderPanel();
     }
+    // Keep this tab's baseline current after its own save, so a long
+    // session doesn't accumulate staleness — the next save's merge check
+    // should be judged against what THIS tab just wrote, not what it
+    // loaded at the very start of the session.
+    setKnownPeopleBaseline(tripSnapshot);
     const size = JSON.stringify(tripSnapshot).length;
     if(size > 45000){
       if(!sizeWarned){
@@ -4045,11 +4119,35 @@ async function loadTripsAndTrip(){
   if(pendingJoinTripId && state.plansCache[pendingJoinTripId]){
     const t = state.plansCache[pendingJoinTripId];
     const myName = String(state.identity.name||'').trim().toLowerCase();
-    const already = t.people.some(p=>String(p.name||'').trim().toLowerCase()===myName);
+    let matchedPerson = t.people.find(p=>String(p.name||'').trim().toLowerCase()===myName);
+    if(!matchedPerson){
+      // No exact match — before creating a duplicate, check for exactly
+      // ONE plausible near-match (e.g. an admin pre-typed "Ronita Deo" but
+      // this account's real name is "Ronita d"). Only acts when there's a
+      // single unambiguous candidate; two or more near-matches, or none,
+      // falls through to creating a fresh row as before — guessing wrong
+      // between multiple candidates would misattribute the wrong person's
+      // row to this account.
+      const looseCandidates = t.people.filter(p => namesLooselyMatch(p.name, state.identity.name));
+      if(looseCandidates.length === 1){
+        matchedPerson = looseCandidates[0];
+        matchedPerson.name = state.identity.name; // adopt the real account name so every other exact-match check (admin rights, trip visibility) lines up from here on
+      }
+    }
+    const already = !!matchedPerson;
     const alreadyHasUid = (t.memberUids||[]).includes(state.identity.uid);
     if(!already || !alreadyHasUid){
       if(!already){
-        t.people.push({id:uid(), name:state.identity.name, roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
+        // Genuinely new to this trip — the admin never pre-typed this
+        // person's name in, so this could be anyone who got hold of the
+        // invite link (forwarded further than intended, an old link
+        // reused, etc). Lands as pending rather than an active member, so
+        // an admin has to actively let them in rather than the trip's
+        // member list (and anyone's view of its budget/documents/
+        // itinerary) growing on its own. Someone the admin DID already
+        // pre-type a name for (exact or near-match above) is treated as
+        // already vetted and stays active immediately, same as today.
+        t.people.push({id:uid(), name:state.identity.name, roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false, status:'pending', pendingUid:state.identity.uid});
       }
       if(!alreadyHasUid){
         if(!Array.isArray(t.memberUids)) t.memberUids = [];
@@ -4083,9 +4181,19 @@ async function loadTripsAndTrip(){
   const myNameLower = String(state.identity.name||'').trim().toLowerCase();
   const toReconcile = Object.values(state.plansCache).filter(t=>{
     if(t.id === justJoinedTripId) return false; // already handled above
-    const named = t.people.some(p=>String(p.name||'').trim().toLowerCase()===myNameLower);
+    let person = t.people.find(p=>String(p.name||'').trim().toLowerCase()===myNameLower);
+    if(!person){
+      // Same conservative near-match as the QR-join path above — only
+      // resolves a single unambiguous candidate, otherwise leaves this
+      // trip alone rather than guessing.
+      const looseCandidates = t.people.filter(p => namesLooselyMatch(p.name, state.identity.name));
+      if(looseCandidates.length === 1){
+        person = looseCandidates[0];
+        person.name = state.identity.name;
+      }
+    }
     const hasUid = (t.memberUids||[]).includes(state.identity.uid);
-    return named && !hasUid;
+    return !!person && !hasUid;
   });
   if(toReconcile.length){
     await Promise.all(toReconcile.map(t=>{
@@ -4153,6 +4261,7 @@ function openTrip(id){
   if(!t) return;
   ensureTripShape(t); // safety net — normalizes any trip object that landed in the cache without going through the normal load path (e.g. a freshly duplicated trip)
   state.trip = t;
+  setKnownPeopleBaseline(t);
   computeAdminForOpenTrip(); // ADMIN now reflects whether I can edit THIS trip specifically
   state.screen = 'trip';
   state.tab = 'overview';
@@ -4177,6 +4286,7 @@ async function refreshCurrentTrip(){
       ensureTripShape(fresh);
       state.plansCache[id] = fresh;
       state.trip = fresh;
+      setKnownPeopleBaseline(fresh);
       computeAdminForOpenTrip();
       render();
       return; // render() rebuilds the button, no need to restore its label below
@@ -4325,7 +4435,15 @@ async function duplicateTripById(id){
       roles: newRoles,
       // who's coming is copied, payments reset — and admin resets too: only
       // whoever duplicated it is admin on the copy, matching "creator becomes admin".
-      people: src.people.map(p=>({...p, id:uid(), roleId: roleIdMap[p.roleId]||'', paid:0, isTripAdmin: String(p.name||'').trim().toLowerCase()===myName})),
+      // Pending join requests are excluded entirely — an unresolved request
+      // belongs to the original trip's context only; nobody asked to join
+      // this new copy, so carrying it over (with a now-irrelevant uid tied
+      // to nothing on this trip) would be copying someone else's in-flight
+      // request into a trip they don't know exists.
+      people: src.people.filter(p=>p.status!=='pending').map(p=>{
+        const {pendingUid, status, ...rest} = p;
+        return {...rest, id:uid(), roleId: roleIdMap[p.roleId]||'', paid:0, isTripAdmin: String(p.name||'').trim().toLowerCase()===myName};
+      }),
       days: newDays,                                                   // meal plan copied as-is
       shopping: src.shopping.map(s=>({...s, id:uid(), unitActual:0, purchased:false})), // list copied, shopping progress reset
       catchLog: {},                                                    // catch counts are per-trip, start fresh
@@ -4380,6 +4498,10 @@ function render(){
 
   if(state.screen === 'account'){
     renderAccountScreen();
+  } else if(state.screen === 'trip' && state.trip && myPersonInTrip(state.trip) && myPersonInTrip(state.trip).status === 'pending'){
+    app.innerHTML = renderPendingApprovalScreen();
+    bindPendingApprovalScreen();
+    return;
   } else if(state.screen === 'trip' && state.trip){
     renderTripScreen();
   } else {
@@ -4470,7 +4592,7 @@ function renderTripScreen(){
         </div>
         <div class="titles">
           <h1 id="tripNameDisplay" title="${ADMIN?'Click to rename':''}" style="${ADMIN?'cursor:pointer':''}">${escapeHtml(t.name)}</h1>
-          <div class="sub">${meta.label} &middot; ${t.people.length} member${t.people.length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
+          <div class="sub">${meta.label} &middot; ${t.people.filter(p=>p.status!=='pending').length} member${t.people.filter(p=>p.status!=='pending').length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
           <div class="loc-line">
             ${t.location && t.location.name
               ? `<a href="${escapeHtml(t.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(t.location.name)))}" target="_blank" rel="noopener">📍 ${escapeHtml(t.location.name)}</a>`
@@ -4574,7 +4696,9 @@ function renderPlansScreen(){
               </div>
             ` : ''}
           </div>
-          <div class="plan-card-sub">${meta.label} &middot; ${t.people.length} member${t.people.length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
+          <div class="plan-card-sub">${meta.label} &middot; ${t.people.filter(p=>p.status!=='pending').length} member${t.people.filter(p=>p.status!=='pending').length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}
+            ${editable && t.people.some(p=>p.status==='pending') ? ` &middot; <span class="access-badge soon">⏳ ${t.people.filter(p=>p.status==='pending').length} waiting</span>` : ''}
+          </div>
           <div class="plan-card-dates">${dateLine}</div>
           <div class="plan-card-stats">
             <div class="stat-chip sm"><b>${money(g.budget, t.currency)}</b><span>Budget</span></div>
@@ -4703,6 +4827,11 @@ function renderAccountScreen(){
           <button class="btn ghost sm" id="btnManageAccessFromAccount">👑 Manage Access</button>
         </div>
       ` : ''}
+      <div class="panel-section">
+        <div class="section-head"><h2>🚪 Log Out</h2></div>
+        <div class="section-note">Signs you out of this account on this device. You'll need your email and password to log back in.</div>
+        <button class="btn ghost sm" id="btnLogOutFromAccount">🚪 Log out</button>
+      </div>
     </div>
   `;
   bindIdentityBadge();
@@ -4716,6 +4845,8 @@ function renderAccountScreen(){
   if(invGeneral) invGeneral.addEventListener('click', ()=>{ state.inviteForTripId = null; render(); });
   const m = document.getElementById('btnManageAccessFromAccount');
   if(m) m.addEventListener('click', ()=>{ state.showManageAccessModal = true; render(); });
+  const logoutBtn = document.getElementById('btnLogOutFromAccount');
+  if(logoutBtn) logoutBtn.addEventListener('click', clearIdentity);
 }
 
 function renderIdentityBadge(inHeader){
@@ -4735,7 +4866,7 @@ function renderIdentityBadge(inHeader){
       <div class="header-identity">
         <span id="backendChip" class="backend-chip"></span>
         <span>Viewing as <b>${name}</b>${roleBadgeHtml}</span>
-        <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">Not you?</button>
+        <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px;background:transparent;color:#F4EFE0;border-color:rgba(244,239,224,0.5)">🚪 Log out</button>
       </div>
     `;
   }
@@ -4743,7 +4874,7 @@ function renderIdentityBadge(inHeader){
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;font-size:11.5px;color:var(--ink-soft)">
       <span id="backendChip" class="backend-chip"></span>
       <span>Viewing as <b style="color:var(--pine-deep)">${name}</b>${roleBadgeHtml}</span>
-      <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">Not you?</button>
+      <button class="btn ghost sm" id="btnSwitchIdentity" style="padding:3px 10px;font-size:11px">🚪 Log out</button>
     </div>
   `;
 }
@@ -4972,6 +5103,14 @@ function renderOverview(t){
 
   return `
     <div class="panel-page-title">🏠 Home</div>
+    ${ADMIN && t.people.some(p=>p.status==='pending') ? `
+    <div class="panel-section">
+      <div class="banner warn">
+        <div><div class="label">⏳ ${t.people.filter(p=>p.status==='pending').length} waiting to join</div>
+        <div style="font-size:12.5px;color:var(--ink-soft)">Someone requested to join this trip and needs your approval.</div></div>
+        <button class="btn ghost sm jump-to-tab" data-tab="people" style="align-self:center">Review in People →</button>
+      </div>
+    </div>` : ''}
     <div class="panel-section">
       <div class="section-head"><h2>Budget vs Actual</h2></div>
       <div class="section-note">Pulled from Trip Costs and every category on your Shopping List.</div>
@@ -5092,6 +5231,19 @@ function renderPeople(t){
   `).join('');
 
   let peopleRows = t.people.map(p=>{
+    if(p.status === 'pending'){
+      return `<tr data-person="${p.id}" class="pending-person-row">
+        <td class="name-col" data-label="Name">${escapeHtml(p.name)}</td>
+        <td data-label="Access" colspan="4">
+          <span class="access-badge soon">⏳ Waiting for approval</span>
+          ${ADMIN ? `
+            <button class="btn ghost sm person-accept" style="margin-left:8px">✓ Accept</button>
+            <button class="btn ghost sm person-decline" style="margin-left:4px">✕ Decline</button>
+          ` : `<span class="section-note" style="margin:0 0 0 8px">Waiting on a trip admin</span>`}
+        </td>
+        <td class="row-actions"></td>
+      </tr>`;
+    }
     const owed = owedFor(t,p);
     const paid = Number(p.paid)||0;
     const bal = owed - paid;
@@ -5117,8 +5269,9 @@ function renderPeople(t){
     </tr>`;
   }).join('');
 
-  const totalOwed = t.people.reduce((s,p)=>s+owedFor(t,p),0);
-  const totalPaid = t.people.reduce((s,p)=>s+(Number(p.paid)||0),0);
+  const pendingCount = t.people.filter(p=>p.status==='pending').length;
+  const totalOwed = t.people.filter(p=>p.status!=='pending').reduce((s,p)=>s+owedFor(t,p),0);
+  const totalPaid = t.people.filter(p=>p.status!=='pending').reduce((s,p)=>s+(Number(p.paid)||0),0);
 
   return `
     <div class="panel-page-title">👥 People &amp; Payments Tracker</div>
@@ -5148,6 +5301,7 @@ function renderPeople(t){
         </div>
       </div>
       <div class="section-note">Tick "Trip Admin" for anyone who should be able to edit this specific trip — the trip's creator gets it automatically.</div>
+      ${pendingCount>0 ? `<div class="banner warn" style="margin-bottom:12px"><div><div class="label">⏳ ${pendingCount} waiting to join</div><div style="font-size:12.5px;color:var(--ink-soft)">Review the highlighted row${pendingCount===1?'':'s'} below to accept or decline.</div></div></div>` : ''}
       <div class="table-scroll">
       <table class="stack-mobile">
         <thead><tr><th class="name-col">Name</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
@@ -5948,6 +6102,21 @@ function bindPanelEvents(){
   qa('.person-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e); t.people = t.people.filter(p=>p.id!==idv); scheduleSave(); renderPanel();
   }));
+  qa('.person-accept').forEach(el=>el.addEventListener('click', e=>{
+    const person = findPerson(t, rowId(e));
+    if(person){ delete person.status; delete person.pendingUid; } // undefined/absent status === active, same as every existing member
+    scheduleSave(); renderPanel();
+  }));
+  qa('.person-decline').forEach(el=>el.addEventListener('click', e=>{
+    const idv = rowId(e);
+    const person = findPerson(t, idv);
+    if(!confirm(`Decline ${person?person.name:'this person'}\u2019s request to join? They\u2019ll stop seeing this trip.`)) return;
+    if(person && person.pendingUid){
+      t.memberUids = (t.memberUids||[]).filter(u=>u!==person.pendingUid);
+    }
+    t.people = t.people.filter(p=>p.id!==idv);
+    scheduleSave(); renderPanel();
+  }));
   qa('.person-trip-admin').forEach(el=>el.addEventListener('change', e=>{
     const person = findPerson(t, rowId(e));
     if(person.isTripAdmin && !e.target.checked){
@@ -6443,6 +6612,68 @@ function authErrorMessage(e){
 }
 
 /* ============================= Verify email gate ============================= */
+/* ============================= Pending trip approval ============================= */
+function renderPendingApprovalScreen(){
+  const t = state.trip;
+  return `
+    <div class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          ${AUTH_LOGO_SVG}
+          <span class="auth-logo-word">My Trip Planner</span>
+        </div>
+        <div class="auth-heading">Waiting for approval</div>
+        <div class="section-note" style="margin-bottom:22px;text-align:center">
+          You've requested to join <b>${escapeHtml(t.name)}</b>. A trip admin needs to accept you before
+          you can see the itinerary, budget, or anything else — you'll get in as soon as they do.
+          There's no automatic notification for this, so check back or hit refresh below after you've
+          let them know you're waiting.
+        </div>
+        <button class="auth-submit" id="pendingRefreshBtn">🔄 Check again</button>
+        <div id="pendingStatus" class="auth-status"></div>
+        <div class="auth-switch">
+          <a href="#" id="pendingBackToPlans">← My Plans</a>
+          &nbsp;&middot;&nbsp;
+          <a href="#" id="pendingLogOut">🚪 Log out</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function bindPendingApprovalScreen(){
+  const statusEl = document.getElementById('pendingStatus');
+  document.getElementById('pendingRefreshBtn').addEventListener('click', async ()=>{
+    statusEl.textContent = 'Checking…';
+    const fresh = await storeGet('trip:'+state.trip.id, true);
+    if(fresh){
+      ensureTripShape(fresh);
+      state.plansCache[state.trip.id] = fresh;
+      state.trip = fresh;
+      setKnownPeopleBaseline(fresh);
+      computeAdminForOpenTrip();
+      // If a person row no longer exists for me at all, that's a decline
+      // (not "still pending") — send back to My Plans rather than falling
+      // through to the real trip screen, which would otherwise happen
+      // simply because "not pending" is also true for "not a member".
+      if(!myPersonInTrip(state.trip)){
+        alert('This trip request was declined, or you\u2019re no longer part of this trip.');
+        backToPlans();
+        return;
+      }
+      render(); // if just approved, render() now routes straight to the real trip screen
+      return;
+    }
+    statusEl.textContent = 'Couldn\u2019t check right now — try again in a moment.';
+  });
+  document.getElementById('pendingBackToPlans').addEventListener('click', (e)=>{
+    e.preventDefault();
+    backToPlans();
+  });
+  document.getElementById('pendingLogOut').addEventListener('click', (e)=>{
+    e.preventDefault();
+    clearIdentity();
+  });
+}
 function renderVerifyEmailGate(){
   const email = escapeHtml((state.authUser && state.authUser.email) || '');
   return `
