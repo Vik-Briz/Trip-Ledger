@@ -121,6 +121,16 @@
   .access-badge.soon{background:var(--rust-tint); color:var(--rust); border-color:#e0b28c;}
   .access-badge.danger{background:var(--danger-tint); color:var(--danger); border-color:#d9b2a8; font-weight:600;}
   .doc-card{border:1px solid var(--line-soft); border-radius:var(--radius); padding:12px 14px; margin-bottom:10px; background:var(--paper-dark);}
+  .poll-option-row{display:flex; align-items:center; gap:8px; padding:6px 0;}
+  .poll-vote-btn{
+    flex:none; width:26px; height:26px; border-radius:50%; border:1.5px solid var(--pine);
+    background:#fff; color:var(--pine); font-size:13px; cursor:pointer; line-height:1;
+  }
+  .poll-vote-btn.voted{background:var(--pine); color:#fff;}
+  .poll-vote-btn:disabled{opacity:.4; cursor:default;}
+  .jetlag-tips{margin-top:8px; font-size:12.5px;}
+  .jetlag-tips summary{cursor:pointer; color:var(--pine-deep); font-weight:600; list-style:revert;}
+  .jetlag-tips summary:hover{text-decoration:underline;}
   .doc-card-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:8px;}
   .doc-card-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px 12px;}
   .doc-field label{display:block; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:2px;}
@@ -182,7 +192,7 @@
   /* ---------- Tabs ---------- */
   .tabs{
     display:flex; gap:2px; margin-top:18px; border-bottom:2px solid var(--pine-deep);
-    overflow-x:auto;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
   .tab{
     padding:10px 16px; cursor:pointer; white-space:nowrap;
@@ -215,8 +225,6 @@
      guaranteed minimum — this fixes both in one pass. */
   .name-col{width:22%; min-width:140px;}
   .name-col input{min-width:130px;}
-  .mobile-col{width:auto; min-width:112px;}
-  .mobile-col input{min-width:100px;}
   .check-col{width:34px; text-align:center; padding-left:4px; padding-right:4px;}
   .check-col input[type=checkbox]{width:16px; height:16px; cursor:pointer;}
   tr.purchased-row .item-name{text-decoration:line-through; opacity:0.55;}
@@ -526,12 +534,12 @@
     box-shadow:0 20px 50px rgba(0,0,0,0.28);
   }
   .auth-logo{
-    display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:26px;
+    display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:26px;
   }
-  .auth-logo-mark{font-size:26px;}
+  .auth-logo-mark{ flex:none; display:block; }
   .auth-logo-word{
-    font-family:'Oswald',sans-serif; font-size:26px; font-weight:600; color:var(--ink);
-    text-transform:lowercase; letter-spacing:.01em;
+    font-family:'Oswald',sans-serif; font-size:24px; font-weight:600; color:var(--ink);
+    letter-spacing:.01em;
   }
   .auth-heading{
     font-family:'Oswald',sans-serif; font-size:24px; font-weight:600; color:var(--ink);
@@ -639,6 +647,14 @@
     .table-scroll table td input, .table-scroll table td select{ min-width:70px; }
     .table-scroll table td.row-actions{ min-width:34px; }
     .scroll-hint{ display:block; }
+
+    /* Contribution Roles is a plain (non-.table-scroll) table — only 4
+       narrow columns, so it fits without needing its own scroll container.
+       The one risk is its free-text Role input growing wide enough on its
+       own to push the table past the screen edge; cap it so that can't
+       happen, same safety goal as .table-scroll's min-width but without
+       forcing this already-narrow table into unnecessary side-scrolling. */
+    .role-label{ max-width:120px; }
 
     /* Meal Plan days stack vertically too — no side-to-side swiping
        inside the page, that gesture is reserved for switching tabs. */
@@ -3489,6 +3505,30 @@ const COMMON_SHOPPING_ITEMS = [
   'Gumboots','Anchor','Fuel (boat/car)','Phone charger/power bank','Maps (offline/paper)',
 ];
 
+// Curated defaults for the Flights tab's "type as you go" suggestions —
+// combined at render time with whatever's actually been typed on other
+// trips, same pattern as COMMON_SHOPPING_ITEMS above.
+const COMMON_AIRLINES = [
+  'Qantas','Jetstar','Virgin Australia','Rex Airlines','Bonza','Air New Zealand',
+  'Singapore Airlines','Emirates','Qatar Airways','Cathay Pacific','Fiji Airways',
+  'Air Vanuatu','United Airlines','American Airlines','Delta Air Lines','British Airways',
+  'Air Canada','Japan Airlines','ANA','Malaysia Airlines','Thai Airways','China Airlines',
+  'Etihad Airways','Turkish Airlines','Air France','Lufthansa','KLM',
+];
+// Format: "CODE|City, Airport name" — split into a value/label pair when
+// rendering the <option>, so the input only fills with the plain code
+// (e.g. "MEL") while the dropdown still shows the city for context.
+const COMMON_AIRPORTS = [
+  'SYD|Sydney, Kingsford Smith','MEL|Melbourne, Tullamarine','BNE|Brisbane',
+  'PER|Perth','ADL|Adelaide','OOL|Gold Coast','CNS|Cairns','DRW|Darwin',
+  'HBA|Hobart','CBR|Canberra','TSV|Townsville','MKY|Mackay','ROK|Rockhampton',
+  'AKL|Auckland','WLG|Wellington','CHC|Christchurch','ZQN|Queenstown',
+  'NAN|Nadi (Fiji)','DPS|Denpasar/Bali','SIN|Singapore','HKG|Hong Kong',
+  'BKK|Bangkok','KUL|Kuala Lumpur','NRT|Tokyo Narita','HND|Tokyo Haneda',
+  'ICN|Seoul Incheon','LAX|Los Angeles','SFO|San Francisco','JFK|New York',
+  'LHR|London Heathrow','DXB|Dubai','DOH|Doha',
+];
+
 function newTrip(name, type, currency){
   return {
     id: uid(),
@@ -3519,6 +3559,7 @@ function newTrip(name, type, currency){
     documents: [],   // [{id, personId, type, number, country, expiryDate, notes, fileUrl}] — passports/visas/insurance/ID, so less paperwork to carry
     bookings: [],    // [{id, label, provider, refNumber, startDate, endDate, notes}] — accommodation/car hire/activity confirmations
     flights: [],     // [{id, personId, airline, flightNumber, date, depAirport, depTime, arrAirport, arrTime, bookingRef, status, statusDetail, statusCheckedAt}]
+    polls: [],       // [{id, question, options:[{id,text}], votes:{voterName: optionId}, createdAt}] — quick group decisions (where to stay, which date, etc)
   };
 }
 
@@ -3576,6 +3617,15 @@ function ensureTripShape(t){
   if(!Array.isArray(t.costs)) t.costs = [];
   if(!Array.isArray(t.roles)) t.roles = [];
   if(!Array.isArray(t.people)) t.people = [];
+  // Privacy cleanup: mobile numbers used to be collected per-person; that
+  // field is fully retired now that real sign-in exists. Scrub it (not
+  // just stop displaying it) so it doesn't linger in Firestore for trips
+  // that were saved before this change — flagged for the same one-time
+  // background save loadTripsAndTrip() already does for other migrations,
+  // rather than waiting for someone to happen to edit that trip next.
+  let hadPhoneField = false;
+  t.people.forEach(p=>{ if(p && 'phone' in p){ delete p.phone; hadPhoneField = true; } });
+  if(hadPhoneField) t._needsMigrationSave = true;
   t.people = t.people.filter(p=>p);
   if(!Array.isArray(t.days)) t.days = [];
   t.days = t.days.filter(d=>d);
@@ -3597,6 +3647,8 @@ function ensureTripShape(t){
   t.bookings = t.bookings.filter(b=>b);
   if(!Array.isArray(t.flights)) t.flights = [];
   t.flights = t.flights.filter(f=>f);
+  if(!Array.isArray(t.polls)) t.polls = [];
+  t.polls = t.polls.filter(p=>p).map(p=>({...p, votes: p.votes||{}, options: Array.isArray(p.options)?p.options:[]}));
   // One-time per-trip migration: make sure EVERY legacy admin/developer still
   // listed in this trip's People actually has isTripAdmin:true, correcting
   // both never-set (undefined) and incorrectly-saved (false) cases — not
@@ -3771,11 +3823,11 @@ function touchIndex(){
   storeSet('trips-index', state.tripsIndex, true);
 }
 
-// Builds the same {name, phone} shape every existing per-trip/directory
-// name-matching check already relies on — nothing downstream needed to
-// change when this replaced the old free-text name entry. phone is no
-// longer collected at sign-up (real accounts don't need it for identity);
-// it stays editable per-person in the Members table as before.
+// Builds the same {name} shape every existing per-trip/directory
+// name-matching check already relies on. Mobile number was previously
+// collected per-person for privacy reasons that no longer apply now that
+// real sign-in exists — it's fully removed, not just hidden, everywhere
+// downstream: nothing writes or reads a phone field anymore.
 // The verification email's "Continue" link needs to carry the pending
 // trip id itself — localStorage does NOT reliably survive the jump to a
 // different browser context, which is exactly what happens when someone
@@ -3789,7 +3841,7 @@ function verificationActionCodeSettings(){
 }
 
 function identityFromAuthUser(user){
-  return {name: user.displayName || '', phone: '', email: user.email || '', uid: user.uid};
+  return {name: user.displayName || '', email: user.email || '', uid: user.uid};
 }
 async function clearIdentity(){
   await withTimeout(signOut(auth), 'Sign out'); // triggers onAuthStateChanged, which handles the rest
@@ -3813,6 +3865,7 @@ function setupSwipeNav(){
     const tag = (e.target.tagName||'').toLowerCase();
     if(tag === 'input' || tag === 'textarea' || tag === 'select'){ active = false; return; }
     if(e.target.closest('.table-scroll')){ active = false; return; } // let the table handle its own sideways scroll
+    if(e.target.closest('.tabs')){ active = false; return; } // let the tab bar handle its own sideways scroll — without this, swiping along the tab bar to reach a tab further along also got read as "swipe to next/prev tab" by this same handler, fighting the tab bar's own scroll and making it hard to actually reach anything
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY; startTime = Date.now();
     active = true;
@@ -3927,8 +3980,15 @@ async function loadTripsAndTrip(){
   // Arrived via a trip-specific Invite link — join that trip as a Member
   // (if not already in it) BEFORE the membership filter below runs, so it's
   // guaranteed to show up instead of landing on an empty "no trips" screen.
+  //
+  // Two sources are checked: a uid-keyed Firestore record (written at
+  // signup time — see authSubmit — which survives email verification
+  // finishing on a different device/browser) and localStorage (fast path
+  // for the common same-tab case, and covers joining a trip while already
+  // signed in, which never goes through the signup handler at all).
   let justJoinedTripId = null;
-  const pendingJoinTripId = getPendingJoinTripId();
+  const pendingJoinRecord = await storeGet('pending-join:'+state.identity.uid, true);
+  const pendingJoinTripId = (pendingJoinRecord && pendingJoinRecord.tripId) || getPendingJoinTripId();
   if(pendingJoinTripId && state.plansCache[pendingJoinTripId]){
     const t = state.plansCache[pendingJoinTripId];
     const myName = String(state.identity.name||'').trim().toLowerCase();
@@ -3936,7 +3996,7 @@ async function loadTripsAndTrip(){
     const alreadyHasUid = (t.memberUids||[]).includes(state.identity.uid);
     if(!already || !alreadyHasUid){
       if(!already){
-        t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
+        t.people.push({id:uid(), name:state.identity.name, roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false});
       }
       if(!alreadyHasUid){
         if(!Array.isArray(t.memberUids)) t.memberUids = [];
@@ -3947,6 +4007,13 @@ async function loadTripsAndTrip(){
     justJoinedTripId = pendingJoinTripId;
   }
   setPendingJoinTripId(null);
+  if(pendingJoinRecord){
+    // Clear the Firestore record now that it's been consumed — leaving it
+    // would silently re-join them to the same trip (harmless, since the
+    // join above is already a no-op for someone already a member, but
+    // pointless to keep around) on every future login.
+    await storeSet('pending-join:'+state.identity.uid, {tripId: null}, true);
+  }
 
   // Reconcile every OTHER trip too — not just one from an invite link.
   // Anyone added by name before they had an account (manual add, or a trip
@@ -4111,7 +4178,7 @@ async function createTrip(name, type, startDate, numDays, currency){
     const n = Math.max(1, Number(numDays)||1);
     t.days = Array.from({length:n}, (_,i)=>({id:uid(), label:'Day '+(i+1), breakfast:'', lunch:'', dinner:''}));
     // The creator is automatically added as a member AND this trip's admin.
-    t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
+    t.people.push({id:uid(), name:state.identity.name, roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
     // memberUids/adminUids are flat uid arrays kept alongside `people` —
     // Firestore security rules can check "is my uid in this array" cheaply,
     // but can't efficiently check "does this array of objects contain one
@@ -4188,6 +4255,7 @@ async function duplicateTripById(id){
       documents: [],   // travel documents are trip-instance-specific (expiry dates, scans) — start fresh, like Catch Log
       bookings: [],    // same — a copy's bookings/confirmations are its own, not the original's
       flights: [],     // same — a copy's flights are its own, not the original's
+      polls: [],       // same — a copy's group decisions are its own, not the original's
       _legacyAdminMigrated: true, // explicit admin assignment above — never subject to the legacy grandfather-in migration
     };
 
@@ -4861,10 +4929,73 @@ function renderOverview(t){
         </div>
       </div>
     </div>
+    ${renderPolls(t)}
   `;
 }
 
-/* ---------- People & Payments ---------- */
+/* ---------- Polls (quick group decisions) ---------- */
+function renderPolls(t){
+  const RO = ADMIN ? '' : 'disabled';
+  const myName = (state.identity && state.identity.name || '').trim();
+
+  const pollCards = t.polls.map(poll=>{
+    const totalVotes = Object.keys(poll.votes||{}).length;
+    const myVote = myName ? (poll.votes||{})[myName] : undefined;
+    const optionRows = (poll.options||[]).map(opt=>{
+      const count = Object.values(poll.votes||{}).filter(v=>v===opt.id).length;
+      const pct = totalVotes ? Math.round((count/totalVotes)*100) : 0;
+      const voters = Object.entries(poll.votes||{}).filter(([,v])=>v===opt.id).map(([name])=>name);
+      const isMine = myVote === opt.id;
+      return `
+      <div class="poll-option-row" data-poll="${poll.id}" data-option="${opt.id}">
+        <button class="poll-vote-btn ${isMine?'voted':''}" ${myName?'':'disabled title="Set your name in People to vote"'}>
+          ${isMine ? '✓' : '○'}
+        </button>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;">
+            <span>${escapeHtml(opt.text)}</span>
+            <span class="section-note" style="margin:0">${count} vote${count===1?'':'s'}${voters.length?' — '+voters.map(escapeHtml).join(', '):''}</span>
+          </div>
+          <div style="background:var(--paper-dark);border-radius:4px;height:6px;margin-top:4px;overflow:hidden;">
+            <div style="background:var(--pine);height:100%;width:${pct}%;"></div>
+          </div>
+        </div>
+        ${ADMIN?`<button class="del poll-option-del" title="Remove option">✕</button>`:''}
+      </div>`;
+    }).join('');
+
+    return `
+    <div class="doc-card" data-poll-card="${poll.id}">
+      <div class="doc-card-head">
+        <input type="text" class="poll-question" value="${escapeHtml(poll.question)}" placeholder="Ask a question…" ${RO} style="flex:1;font-weight:700;border:none;background:none;padding:2px 0;font-size:15px;">
+        ${ADMIN?'<button class="del poll-del" title="Remove poll">✕</button>':''}
+      </div>
+      ${optionRows || `<div class="section-note" style="margin:4px 0">No options yet.</div>`}
+      ${ADMIN?`
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <input type="text" class="poll-new-option-input" placeholder="Add an option…" style="flex:1">
+        <button class="btn ghost sm poll-add-option" data-poll="${poll.id}">+ Add</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="panel-section">
+      <div class="section-head"><h2>🗳️ Polls</h2>
+        ${ADMIN?'<button class="btn ghost sm" id="addPoll">+ New poll</button>':''}
+      </div>
+      <div class="section-note">Quick group decisions — where to stay, which date works, what's for dinner. Everyone with the trip open can vote once your name is set up in People.</div>
+      ${pollCards || `
+        <div class="empty">
+          <span class="empty-glyph">🗳️</span>
+          <div class="empty-title">No polls yet</div>
+          ${ADMIN
+            ? `Ask the group something and watch votes come in live.<button class="btn ghost sm" id="addPollEmpty">+ Create first poll</button>`
+            : `The trip admin hasn\u2019t started any polls yet.`}
+        </div>`}
+    </div>
+  `;
+}
 function renderPeople(t){
   const RO = ADMIN ? '' : 'disabled';
   const abbrOf = roleAbbreviations(t.roles);
@@ -4886,7 +5017,6 @@ function renderPeople(t){
     const selectedRole = t.roles.find(r=>r.id===p.roleId);
     return `<tr data-person="${p.id}" ${isMe?'style="background:var(--pine-tint)"':''}>
       <td class="name-col" data-label="Name"><input type="text" class="person-name" value="${escapeHtml(p.name)}" placeholder="Name" ${RO}></td>
-      <td class="mobile-col" data-label="Mobile"><input type="text" class="person-phone" value="${escapeHtml(p.phone||'')}" placeholder="Mobile" ${RO}></td>
       <td data-label="Access">
         ${isGlobalDev ? `<span class="access-badge developer" style="margin-right:4px;">Developer</span>` : ''}
         <span class="access-badge ${p.isTripAdmin?'admin':'member'}"><input type="checkbox" class="person-trip-admin" ${p.isTripAdmin?'checked':''} ${RO} title="Admin for this trip" style="vertical-align:middle;margin-right:4px;">${p.isTripAdmin?'Trip Admin':'Member'}</span>
@@ -4937,7 +5067,7 @@ function renderPeople(t){
       <div class="section-note">Tick "Trip Admin" for anyone who should be able to edit this specific trip — the trip's creator gets it automatically.</div>
       <div class="table-scroll">
       <table class="stack-mobile">
-        <thead><tr><th class="name-col">Name</th><th class="mobile-col">Mobile</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
+        <thead><tr><th class="name-col">Name</th><th>Access</th><th>Role</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Balance</th><th></th></tr></thead>
         <tbody>
           ${peopleRows || `<tr><td colspan="8">
             <div class="empty">
@@ -5226,13 +5356,57 @@ function formatFlightTime(iso){
   if(isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
 }
-// Flags a flight whose scheduled departure follows the same person's
-// previous flight's scheduled arrival by less than 90 minutes. Only works
-// once "Check status" has been run on both legs, since that's the only
-// place real scheduled times come from — the free-text dep/arr fields
-// aren't structured enough to compare reliably.
-function computeConnectionRisks(t){
-  const risks = {};
+// Extracts a timezone offset in minutes from an ISO datetime string's
+// trailing +HH:MM/-HH:MM/Z, or null if none is present.
+function timezoneOffsetMinutes(iso){
+  if(!iso) return null;
+  const m = /([+-]\d{2}):?(\d{2})$/.exec(iso);
+  if(m){
+    const sign = m[1][0]==='-' ? -1 : 1;
+    return sign * (parseInt(m[1].slice(1),10)*60 + parseInt(m[2],10));
+  }
+  return iso.endsWith('Z') ? 0 : null;
+}
+// Simple rule-of-thumb jet lag guidance, not a proprietary chronobiology
+// algorithm — computed from the timezone gap between a flight's scheduled
+// departure and arrival (both come from the Cloud Function's AeroDataBox
+// response, so this only shows once "Check status" has actually been run
+// on a given flight). Returns null when there's nothing meaningful to say
+// (same/near timezone, or no status data yet).
+function jetLagTips(f){
+  const d = f.statusDetail;
+  if(!d || !d.departureScheduled || !d.arrivalScheduled) return null;
+  const depOffset = timezoneOffsetMinutes(d.departureScheduled);
+  const arrOffset = timezoneOffsetMinutes(d.arrivalScheduled);
+  if(depOffset===null || arrOffset===null) return null;
+  const diffHours = Math.round((arrOffset - depOffset) / 60);
+  if(diffHours === 0) return null;
+  const absDiff = Math.abs(diffHours);
+  const east = diffHours > 0;
+  const tips = [];
+  if(absDiff < 3){
+    tips.push(`Only a ${absDiff}-hour shift — most people adjust to this within a day, if they notice it at all.`);
+    return tips;
+  }
+  tips.push(`Crossing ${absDiff} time zones ${east?'eastward':'westward'} — ${east?'generally the harder direction to adjust to':'usually the easier direction to adjust to'}.`);
+  if(east){
+    tips.push('A few days before: try shifting bedtime ~30–60 min earlier each night.');
+    tips.push('On arrival: get outside for morning light, and avoid long daytime naps.');
+  } else {
+    tips.push('A few days before: try shifting bedtime ~30–60 min later each night.');
+    tips.push('On arrival: get outside for afternoon/evening light, and avoid sleeping in too late.');
+  }
+  if(absDiff >= 8) tips.push('That\u2019s a big shift — expect a few days to feel fully adjusted, so keep arrival day light.');
+  return tips;
+}
+// For every flight, computes the gap since that same person's previous
+// flight's scheduled arrival — used both to show a TripIt-style "X hr Y
+// min layover in ABC" line between connecting flights, and to flag a
+// layover under 90 minutes as tight. Only works once "Check status" has
+// been run on both legs, since that's the only source of real scheduled
+// times — the free-text dep/arr fields aren't structured enough to compare.
+function computeFlightGaps(t){
+  const gaps = {};
   const byPerson = {};
   t.flights.forEach(f=>{
     const key = f.personId || '__group__';
@@ -5246,16 +5420,19 @@ function computeConnectionRisks(t){
       const nextDep = next.statusDetail && next.statusDetail.departureScheduled;
       if(!curArr || !nextDep) continue;
       const diffMin = Math.round((new Date(nextDep).getTime() - new Date(curArr).getTime()) / 60000);
-      if(!isNaN(diffMin) && diffMin >= 0 && diffMin < 90){
-        risks[next.id] = diffMin;
+      if(!isNaN(diffMin) && diffMin >= 0){
+        gaps[next.id] = {minutes: diffMin, tight: diffMin < 90, location: next.depAirport || ''};
       }
     }
   });
-  return risks;
+  return gaps;
 }
-// Renders one flight as a compact card — used both for flights that land
-// inside a matching itinerary day, and for the "Unscheduled flights" strip.
-function renderFlightCard(t, f, risks){
+// Renders one flight as a timeline entry — same visual family as an
+// itinerary activity row (time column, icon badge on the connecting line,
+// detail column), so flights read as part of one continuous itinerary
+// instead of a separate boxed-off section. If gapInfo is passed, a
+// layover row is rendered first, above the flight itself.
+function renderFlightTimelineRow(t, f, gapInfo){
   const RO = ADMIN ? '' : 'disabled';
   const d = f.statusDetail;
   const detailRows = [];
@@ -5265,32 +5442,69 @@ function renderFlightCard(t, f, risks){
     if(d.arrivalTerminal || d.arrivalGate) detailRows.push(`Arrival: ${[d.arrivalTerminal?'Terminal '+escapeHtml(d.arrivalTerminal):'', d.arrivalGate?'Gate '+escapeHtml(d.arrivalGate):''].filter(Boolean).join(', ')}`);
     if(d.arrivalScheduled) detailRows.push(`Scheduled arrival: ${escapeHtml(formatFlightTime(d.arrivalScheduled))}`);
   }
-  const risk = risks[f.id];
-  return `
-    <div class="doc-card flight-card" data-flight="${f.id}">
-      <div class="doc-card-head">
-        <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:20px">✈️</span>
-          <select class="flight-person" ${RO}>
-            <option value="">— Whole group —</option>
-            ${t.people.map(p=>`<option value="${p.id}" ${p.id===f.personId?'selected':''}>${escapeHtml(p.name||'Unnamed')}</option>`).join('')}
-          </select>
+  const timeLabel = (d && d.departureScheduled) ? new Date(d.departureScheduled).toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'}) : '';
+  const tips = jetLagTips(f);
+
+  const layoverRow = gapInfo ? `
+    <div class="itin-row flight-layover-row">
+      <div class="itin-time-col"></div>
+      <div class="itin-line-col">
+        <div class="itin-icon-badge" style="background:var(--paper-dark);border-color:var(--line-soft);cursor:default" title="Layover">
+          <span class="itin-icon-badge-emoji">🕐</span>
         </div>
-        ${flightStatusBadge(f)}
-        ${ADMIN?'<button class="del flight-del" title="Remove flight">✕</button>':''}
       </div>
-      <div class="doc-card-grid">
-        <div class="doc-field"><label>Airline</label><input type="text" class="flight-airline" value="${escapeHtml(f.airline||'')}" placeholder="e.g. Qantas" ${RO}></div>
-        <div class="doc-field"><label>Flight number</label><input type="text" class="flight-number" value="${escapeHtml(f.flightNumber||'')}" placeholder="e.g. QF430" ${RO} style="text-transform:uppercase"></div>
-        <div class="doc-field"><label>Date</label><input type="date" class="flight-date" value="${escapeHtml(f.date||'')}" ${RO}></div>
-        <div class="doc-field"><label>Booking ref</label><input type="text" class="flight-ref" value="${escapeHtml(f.bookingRef||'')}" placeholder="PNR" ${RO}></div>
-        <div class="doc-field"><label>Departs</label><input type="text" class="flight-dep" value="${escapeHtml(f.depAirport||'')}" placeholder="e.g. BNE 6:30am" ${RO}></div>
-        <div class="doc-field"><label>Arrives</label><input type="text" class="flight-arr" value="${escapeHtml(f.arrAirport||'')}" placeholder="e.g. SYD 8:00am" ${RO}></div>
+      <div class="itin-detail-col" style="padding-top:9px">
+        <div class="section-note" style="margin:0">
+          ${Math.floor(gapInfo.minutes/60)>0 ? Math.floor(gapInfo.minutes/60)+' hr ' : ''}${gapInfo.minutes%60} min layover${gapInfo.location?' in '+escapeHtml(gapInfo.location):''}
+          ${gapInfo.tight ? ' <span class="access-badge danger" style="margin-left:4px">⚠️ Tight</span>' : ''}
+        </div>
       </div>
-      ${detailRows.length ? `<div class="section-note" style="margin-top:8px;line-height:1.7">${detailRows.join('<br>')}</div>` : ''}
-      ${risk!==undefined ? `<div style="margin-top:8px"><span class="access-badge danger">⚠️ Tight connection — only ${risk} min after previous flight</span></div>` : ''}
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <button class="btn ghost sm flight-check" data-flight-check="${f.id}">🔄 Check status</button>
-        ${f.statusCheckedAt ? `<span class="section-note" style="margin:0">Last checked ${new Date(f.statusCheckedAt).toLocaleString()}</span>` : ''}
+    </div>
+  ` : '';
+
+  return layoverRow + `
+    <div class="itin-row" data-flight="${f.id}">
+      <div class="itin-time-col">
+        <div class="itin-time-input" style="cursor:default">${escapeHtml(timeLabel)}</div>
+      </div>
+      <div class="itin-line-col">
+        <div class="itin-icon-badge" title="Flight" style="cursor:default">
+          <span class="itin-icon-badge-emoji">✈️</span>
+        </div>
+      </div>
+      <div class="itin-detail-col">
+        <div class="itin-detail-top-row">
+          <div style="flex:1;min-width:0;font-weight:700;font-size:14.5px;font-family:'IBM Plex Mono',monospace">
+            ${escapeHtml(f.depAirport||'???')} → ${escapeHtml(f.arrAirport||'???')}
+          </div>
+          ${flightStatusBadge(f)}
+          ${ADMIN?'<button class="del flight-del" title="Remove flight">✕</button>':''}
+        </div>
+        <div class="doc-card-grid" style="margin-top:8px">
+          <div class="doc-field"><label>Traveller</label>
+            <select class="flight-person" ${RO}>
+              <option value="">— Whole group —</option>
+              ${t.people.map(p=>`<option value="${p.id}" ${p.id===f.personId?'selected':''}>${escapeHtml(p.name||'Unnamed')}</option>`).join('')}
+            </select>
+          </div>
+          <div class="doc-field"><label>Airline</label><input type="text" class="flight-airline" list="tripledgerAirlineList" value="${escapeHtml(f.airline||'')}" placeholder="e.g. Qantas" ${RO}></div>
+          <div class="doc-field"><label>Flight number</label><input type="text" class="flight-number" value="${escapeHtml(f.flightNumber||'')}" placeholder="e.g. QF430" ${RO} style="text-transform:uppercase"></div>
+          <div class="doc-field"><label>Date</label><input type="date" class="flight-date" value="${escapeHtml(f.date||'')}" ${RO}></div>
+          <div class="doc-field"><label>Booking ref</label><input type="text" class="flight-ref" value="${escapeHtml(f.bookingRef||'')}" placeholder="PNR" ${RO}></div>
+          <div class="doc-field"><label>Departs</label><input type="text" class="flight-dep" list="tripledgerAirportList" value="${escapeHtml(f.depAirport||'')}" placeholder="e.g. BNE" ${RO}></div>
+          <div class="doc-field"><label>Arrives</label><input type="text" class="flight-arr" list="tripledgerAirportList" value="${escapeHtml(f.arrAirport||'')}" placeholder="e.g. SYD" ${RO}></div>
+        </div>
+        ${detailRows.length ? `<div class="section-note" style="margin-top:8px;line-height:1.7">${detailRows.join('<br>')}</div>` : ''}
+        ${tips ? `<details class="jetlag-tips">
+          <summary>💤 Jet Lag Tips</summary>
+          <ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-soft);line-height:1.6">
+            ${tips.map(tip=>`<li>${escapeHtml(tip)}</li>`).join('')}
+          </ul>
+        </details>` : ''}
+        <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn ghost sm flight-check" data-flight-check="${f.id}">🔄 Check status</button>
+          ${f.statusCheckedAt ? `<span class="section-note" style="margin:0">Last checked ${new Date(f.statusCheckedAt).toLocaleString()}</span>` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -5354,15 +5568,38 @@ function renderMeals(t){
 /* ---------- Itinerary ---------- */
 function renderItinerary(t){
   const RO = ADMIN ? '' : 'disabled';
-  const risks = computeConnectionRisks(t);
+  const gaps = computeFlightGaps(t);
+  // "Type as you go" suggestions for the Flights fields — curated defaults
+  // combined with anything already typed on any trip, same pattern as the
+  // Shopping tab's item-name autocomplete.
+  const otherTripAirlines = Object.values(state.plansCache||{}).flatMap(tr=>(tr.flights||[]).map(f=>f.airline));
+  const airlineList = [...new Set([...COMMON_AIRLINES, ...otherTripAirlines, ...t.flights.map(f=>f.airline)].filter(Boolean))].sort();
+  const otherTripAirports = Object.values(state.plansCache||{}).flatMap(tr=>(tr.flights||[]).flatMap(f=>[f.depAirport, f.arrAirport]));
+  const curatedAirportCodes = new Set(COMMON_AIRPORTS.map(a=>a.split('|')[0]));
+  const extraAirportCodes = [...new Set([...otherTripAirports, ...t.flights.flatMap(f=>[f.depAirport, f.arrAirport])].filter(Boolean))]
+    .filter(code => !curatedAirportCodes.has(code));
+  const airportDatalistHtml = `
+    <datalist id="tripledgerAirlineList">
+      ${airlineList.map(a=>`<option value="${escapeHtml(a)}">`).join('')}
+    </datalist>
+    <datalist id="tripledgerAirportList">
+      ${COMMON_AIRPORTS.map(entry=>{
+        const [code, label] = entry.split('|');
+        return `<option value="${escapeHtml(code)}" label="${escapeHtml(label)}">`;
+      }).join('')}
+      ${extraAirportCodes.map(code=>`<option value="${escapeHtml(code)}">`).join('')}
+    </datalist>
+  `;
   function typeOptionsFor(selectedType){
     return Object.entries(ACTIVITY_TYPES).map(([k,v])=>
       `<option value="${k}" ${k===selectedType?'selected':''}>${v.icon} ${v.label}</option>`
     ).join('');
   }
   // Every day's real calendar date, so flights can be matched to the day
-  // they're on. Flights whose date doesn't match any day (or have no date
-  // yet) fall into the "Unscheduled flights" strip instead of vanishing.
+  // they're on and woven into that day's timeline. Flights whose date
+  // doesn't match any day (or have no date yet) fall into a slim
+  // "Unscheduled" group instead of vanishing — styled like a day group,
+  // not a separate boxed section, so it stays part of one flowing timeline.
   const dayDates = t.days.map((d,i)=> t.startDate ? dayDateFor(t,i) : '');
   const matchedFlightIds = new Set();
   const dayGroups = t.days.map((d,i)=>{
@@ -5373,7 +5610,10 @@ function renderItinerary(t){
 
     const dayFlights = dateStr ? t.flights.filter(f=>f.date===dateStr) : [];
     dayFlights.forEach(f=>matchedFlightIds.add(f.id));
-    const flightCards = dayFlights.map(f=>renderFlightCard(t, f, risks)).join('');
+    // Flights render first in the day (travel typically happens before
+    // other planned activities), each preceded by its own layover row
+    // when it's a connecting leg from an earlier flight the same day.
+    const flightRows = dayFlights.map(f=>renderFlightTimelineRow(t, f, gaps[f.id])).join('');
 
     const rows = acts.map((a,idx)=>{
       const meta = ACTIVITY_TYPES[a.type] || ACTIVITY_TYPES.activity;
@@ -5421,39 +5661,37 @@ function renderItinerary(t){
     return `
     <div class="itin-day-group" data-day="${d.id}">
       <div class="itin-date-header">${escapeHtml(headerLabel)}</div>
-      ${flightCards ? `<div class="itin-flights-wrap" style="margin-bottom:10px">${flightCards}</div>` : ''}
       <div class="itin-rows-wrap">
-        ${rows || `<div class="empty" style="padding:14px 0 14px 60px;font-size:12px;">Nothing planned yet.</div>`}
+        ${flightRows}${rows || (flightRows ? '' : `<div class="empty" style="padding:14px 0 14px 60px;font-size:12px;">Nothing planned yet.</div>`)}
       </div>
-      ${ADMIN?`<button class="btn ghost sm add-activity-btn" data-day-id="${d.id}" style="margin:6px 0 4px 60px">+ Add activity</button>`:''}
+      ${ADMIN?`
+      <div style="margin:6px 0 4px 60px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost sm add-activity-btn" data-day-id="${d.id}">+ Add activity</button>
+        <button class="btn ghost sm add-flight-to-day-btn" data-day-date="${dateStr}">+ Add flight</button>
+      </div>`:''}
     </div>
   `;
   }).join('');
 
   const unscheduledFlights = t.flights.filter(f=>!matchedFlightIds.has(f.id));
-  const unscheduledCards = unscheduledFlights.map(f=>renderFlightCard(t, f, risks)).join('');
+  const unscheduledRows = unscheduledFlights.map(f=>renderFlightTimelineRow(t, f, gaps[f.id])).join('');
+  const unscheduledGroup = unscheduledFlights.length ? `
+    <div class="itin-day-group" data-unscheduled-flights="1">
+      <div class="itin-date-header">Unscheduled flights</div>
+      <div class="itin-rows-wrap">${unscheduledRows}</div>
+    </div>
+  ` : '';
 
   return `
     <div class="panel-page-title">🗓️ Itinerary</div>
+    ${airportDatalistHtml}
     <div class="panel-section">
-      <div class="section-head"><h2>✈️ Flights</h2>
+      <div class="section-head"><h2>Day-by-day</h2>
         ${ADMIN?'<button class="btn ghost sm" id="addFlight">+ Add flight</button>':''}
       </div>
-      <div class="section-note">Flights with a date matching a trip day show inside that day's timeline below. Anything without a matching date shows here instead. Hit "Check status" on each for live delay/cancellation info.</div>
-      ${unscheduledCards || (t.flights.length
-        ? `<div class="section-note" style="margin:0">All flights are matched to a day below.</div>`
-        : `<div class="empty">
-            <span class="empty-glyph">✈️</span>
-            <div class="empty-title">No flights added yet</div>
-            ${ADMIN
-              ? `Add everyone\u2019s flights so the group can see delays at a glance.<button class="btn ghost sm" id="addFlightEmpty">+ Add first flight</button>`
-              : `The trip admin hasn\u2019t added any flights yet.`}
-          </div>`)}
-    </div>
-    <div class="panel-section">
-      <div class="section-head"><h2>Day-by-day</h2></div>
-      <div class="section-note">Your trip timeline — check-ins, launch times, anything time-based. Use ▲▼ to reorder within a day. Days are the same ones set up in Meal Plan.</div>
+      <div class="section-note">Your trip timeline — flights, check-ins, launch times, anything time-based. Flights with a date matching a day appear right in that day's timeline; give a flight a date and it'll move there automatically. Use ▲▼ to reorder activities within a day.</div>
       <div class="itinerary-timeline">
+        ${unscheduledGroup}
         ${dayGroups || `<div class="empty">
           <span class="empty-glyph">🗓️</span>
           <div class="empty-title">No days set up yet</div>
@@ -5617,9 +5855,6 @@ function bindPanelEvents(){
   qa('.person-name').forEach(el=>el.addEventListener('input', e=>{
     findPerson(t, rowId(e)).name = e.target.value; scheduleSave();
   }));
-  qa('.person-phone').forEach(el=>el.addEventListener('input', e=>{
-    findPerson(t, rowId(e)).phone = e.target.value; scheduleSave();
-  }));
   qa('.person-role').forEach(el=>el.addEventListener('change', e=>{
     findPerson(t, rowId(e)).roleId = e.target.value; scheduleSave(); renderPanel();
   }));
@@ -5647,7 +5882,7 @@ function bindPanelEvents(){
     }
     renderPanel();
   }));
-  const addPersonHandler = ()=>{ t.people.push({id:uid(), name:'', phone:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel(); };
+  const addPersonHandler = ()=>{ t.people.push({id:uid(), name:'', roleId: (t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:false}); scheduleSave(); renderPanel(); };
   id('addPerson') && id('addPerson').addEventListener('click', addPersonHandler);
   id('addPersonEmpty') && id('addPersonEmpty').addEventListener('click', addPersonHandler);
   id('btnInviteToTrip') && id('btnInviteToTrip').addEventListener('click', ()=>{
@@ -5777,6 +6012,60 @@ function bindPanelEvents(){
   const addFlightHandler = ()=>{ t.flights.push({id:uid(), personId:'', airline:'', flightNumber:'', date: t.startDate||'', depAirport:'', arrAirport:'', bookingRef:'', status:'', statusDetail:null, statusCheckedAt:null}); scheduleSave(); renderPanel(); };
   id('addFlight') && id('addFlight').addEventListener('click', addFlightHandler);
   id('addFlightEmpty') && id('addFlightEmpty').addEventListener('click', addFlightHandler);
+  qa('.add-flight-to-day-btn').forEach(el=>el.addEventListener('click', e=>{
+    t.flights.push({id:uid(), personId:'', airline:'', flightNumber:'', date: e.target.dataset.dayDate || '', depAirport:'', arrAirport:'', bookingRef:'', status:'', statusDetail:null, statusCheckedAt:null});
+    scheduleSave(); renderPanel();
+  }));
+
+  // POLLS
+  qa('.poll-question').forEach(el=>el.addEventListener('input', e=>{
+    const card = e.target.closest('[data-poll-card]');
+    const poll = findPoll(t, card.getAttribute('data-poll-card'));
+    if(poll){ poll.question = e.target.value; scheduleSave(); }
+  }));
+  qa('.poll-vote-btn').forEach(el=>el.addEventListener('click', e=>{
+    const row = e.target.closest('.poll-option-row');
+    const poll = findPoll(t, row.getAttribute('data-poll'));
+    const optionId = row.getAttribute('data-option');
+    const myName = (state.identity && state.identity.name || '').trim();
+    if(!poll || !myName) return;
+    if(!poll.votes) poll.votes = {};
+    // Tapping your own already-selected option again removes your vote —
+    // a simple toggle, so voting is a one-tap change of mind, not a
+    // separate "clear my vote" control to hunt for.
+    poll.votes[myName] = (poll.votes[myName] === optionId) ? undefined : optionId;
+    if(poll.votes[myName] === undefined) delete poll.votes[myName];
+    scheduleSave(); renderPanel();
+  }));
+  qa('.poll-option-del').forEach(el=>el.addEventListener('click', e=>{
+    const row = e.target.closest('.poll-option-row');
+    const poll = findPoll(t, row.getAttribute('data-poll'));
+    const optionId = row.getAttribute('data-option');
+    if(!poll) return;
+    poll.options = poll.options.filter(o=>o.id!==optionId);
+    Object.keys(poll.votes||{}).forEach(name=>{ if(poll.votes[name]===optionId) delete poll.votes[name]; });
+    scheduleSave(); renderPanel();
+  }));
+  qa('.poll-add-option').forEach(el=>el.addEventListener('click', e=>{
+    const pollId = e.target.dataset.poll;
+    const poll = findPoll(t, pollId);
+    const input = e.target.closest('.doc-card').querySelector('.poll-new-option-input');
+    const text = input && input.value.trim();
+    if(!poll || !text) return;
+    if(!poll.options) poll.options = [];
+    poll.options.push({id: uid(), text});
+    scheduleSave(); renderPanel();
+  }));
+  qa('.poll-del').forEach(el=>el.addEventListener('click', e=>{
+    const card = e.target.closest('[data-poll-card]');
+    const pollId = card.getAttribute('data-poll-card');
+    if(confirm('Remove this poll and its votes?')){
+      t.polls = t.polls.filter(p=>p.id!==pollId); scheduleSave(); renderPanel();
+    }
+  }));
+  const addPollHandler = ()=>{ t.polls.push({id:uid(), question:'New poll', options:[{id:uid(),text:'Option A'},{id:uid(),text:'Option B'}], votes:{}, createdAt:Date.now()}); scheduleSave(); renderPanel(); };
+  id('addPoll') && id('addPoll').addEventListener('click', addPollHandler);
+  id('addPollEmpty') && id('addPollEmpty').addEventListener('click', addPollHandler);
 
   // MEALS
   qa('.day-label').forEach(el=>el.addEventListener('input', e=>{ findDay(t, rowId(e,'day')).label = e.target.value; scheduleSave(); }));
@@ -5919,18 +6208,35 @@ function findActivity(t,id){ return t.activities.find(a=>a.id===id); }
 function findDocument(t,id){ return t.documents.find(d=>d.id===id); }
 function findBooking(t,id){ return t.bookings.find(b=>b.id===id); }
 function findFlight(t,id){ return t.flights.find(f=>f.id===id); }
+function findPoll(t,id){ return t.polls.find(p=>p.id===id); }
 
 /* ============================= Identity gate ============================= */
+// Globe-and-plane mark used on both the sign-in/sign-up screen and the
+// verify-email screen — a single shared constant so both stay in sync.
+// Pine-colored globe (meridian/latitude lines, no fill) with a rust-colored
+// plane banking around its upper edge, echoing the app's travel theme.
+const AUTH_LOGO_SVG = `
+  <svg class="auth-logo-mark" width="34" height="34" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="20" cy="20" r="14.5" fill="none" style="stroke:var(--pine)" stroke-width="2"/>
+    <ellipse cx="20" cy="20" rx="14.5" ry="6" fill="none" style="stroke:var(--pine)" stroke-width="1.2" opacity="0.55"/>
+    <ellipse cx="20" cy="20" rx="6" ry="14.5" fill="none" style="stroke:var(--pine)" stroke-width="1.2" opacity="0.55"/>
+    <line x1="5.5" y1="20" x2="34.5" y2="20" style="stroke:var(--pine)" stroke-width="1.2" opacity="0.55"/>
+    <path d="M 6 13 A 17 17 0 0 1 29 6" fill="none" style="stroke:var(--rust)" stroke-width="1.3" stroke-dasharray="1.5 2.5" opacity="0.6" stroke-linecap="round"/>
+    <g transform="translate(29,6) rotate(52)">
+      <path d="M0 -6.2 L1.5 -2 L7.2 -0.6 L7.2 1 L1.5 1 L0.5 4.8 L2.3 6.1 L2.3 7.1 L0 6.1 L-2.3 7.1 L-2.3 6.1 L-0.5 4.8 L-1.5 1 L-7.2 1 L-7.2 -0.6 L-1.5 -2 Z" style="fill:var(--rust)"/>
+    </g>
+  </svg>
+`;
 function renderIdentityGate(){
   const isSignup = state.authMode === 'signup';
   return `
     <div class="auth-screen">
       <div class="auth-card">
         <div class="auth-logo">
-          <span class="auth-logo-mark">🎣</span>
-          <span class="auth-logo-word">trip-ledger</span>
+          ${AUTH_LOGO_SVG}
+          <span class="auth-logo-word">My Trip Planner</span>
         </div>
-        <div class="auth-heading">${isSignup ? 'Create your<br>Trip-Ledger account' : 'Log into your<br>Trip-Ledger account'}</div>
+        <div class="auth-heading">${isSignup ? 'Create your<br>My Trip Planner account' : 'Log into your<br>My Trip Planner account'}</div>
         ${isSignup ? `
         <div class="auth-field">
           <label for="authName">Full name</label>
@@ -6011,6 +6317,19 @@ function bindIdentityGate(){
       if(isSignup){
         const cred = await withTimeout(createUserWithEmailAndPassword(auth, email, password), 'Creating account');
         await withTimeout(updateProfile(cred.user, {displayName: name}), 'Saving name');
+        // Persist the pending trip-join server-side, keyed by this new
+        // user's uid, BEFORE sending the verification email. localStorage
+        // alone isn't reliable here — email verification often finishes on
+        // a completely different device or browser context (tap the link
+        // in a phone's mail app after signing up on a laptop, for example),
+        // where neither localStorage nor the ?t= link param are guaranteed
+        // to survive. A uid-keyed Firestore record is reachable from
+        // wherever the person is signed in once they come back, regardless
+        // of device. localStorage is kept too, as a fast same-tab path.
+        const pendingId = getPendingJoinTripId();
+        if(pendingId){
+          await storeSet('pending-join:'+cred.user.uid, {tripId: pendingId}, true);
+        }
         await withTimeout(sendEmailVerification(cred.user, verificationActionCodeSettings()), 'Sending verification email');
         // onAuthStateChanged fires from the sign-up itself — it'll see an
         // unverified user and render() will switch to the verify-email gate.
@@ -6047,8 +6366,8 @@ function renderVerifyEmailGate(){
     <div class="auth-screen">
       <div class="auth-card">
         <div class="auth-logo">
-          <span class="auth-logo-mark">🎣</span>
-          <span class="auth-logo-word">trip-ledger</span>
+          ${AUTH_LOGO_SVG}
+          <span class="auth-logo-word">My Trip Planner</span>
         </div>
         <div class="auth-heading">Check your email</div>
         <div class="section-note" style="margin-bottom:22px;text-align:center">
@@ -6614,7 +6933,6 @@ function applyImport(t, data){
     t.people = data.people.map(p=>({
       id: uid(),
       name: p.name||'',
-      phone: p.phone||'',
       roleId: roleIdByLabel[p.roleLabel] || (t.roles[0] && t.roles[0].id) || '',
       paid: Number(p.paid)||0,
       isTripAdmin: priorAdminNames.has(String(p.name||'').trim().toLowerCase()),
@@ -6628,7 +6946,7 @@ function applyImport(t, data){
       if(me){
         me.isTripAdmin = true;
       } else {
-        t.people.push({id:uid(), name:state.identity.name, phone:state.identity.phone||'', roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
+        t.people.push({id:uid(), name:state.identity.name, roleId:(t.roles[0]&&t.roles[0].id)||'', paid:0, isTripAdmin:true});
       }
     }
   }
