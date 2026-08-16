@@ -494,6 +494,11 @@
     .itin-time-input, .itin-endtime-input{ min-width:62px; font-size:12.5px; }
     .itin-rows-wrap::before{ left:96px; }
     .itin-title-input{ font-size:13.5px; }
+    /* 4 trip-type buttons (was 3) get tight on narrow phones at the
+       original padding/font-size — trim both slightly so "Camping" etc.
+       don't wrap awkwardly inside their button. */
+    .type-pick button{ padding:12px 4px; font-size:9.5px; gap:3px; }
+    .type-pick button .g{ font-size:19px; }
   }
 
   .modal-backdrop{
@@ -3486,6 +3491,7 @@ async function grantDeveloperUid(uidToGrant){
 }
 
 const TYPE_META = {
+  travel:  {glyph:'✈️', label:'Travel Trip'},
   fishing: {glyph:'🎣', label:'Fishing Trip'},
   camping: {glyph:'⛺', label:'Camping Trip'},
   other:   {glyph:'🧭', label:'Trip'},
@@ -3533,7 +3539,7 @@ function newTrip(name, type, currency){
   return {
     id: uid(),
     name: name || 'New Trip',
-    type: type || 'fishing',
+    type: type || 'travel',
     currency: currency || DEFAULT_CURRENCY,
     createdAt: Date.now(),
     photo: null,               // base64 data URL of cover photo
@@ -6461,12 +6467,13 @@ function renderNewTripModal(){
         <h2>New trip</h2>
         <div class="field">
           <label>Trip name</label>
-          <input type="text" id="newTripName" placeholder="e.g. Straddie Fishing 2027">
+          <input type="text" id="newTripName" placeholder="e.g. My Group Trip 2027">
         </div>
         <div class="field">
           <label>Trip type</label>
           <div class="type-pick" id="typePick">
-            <button data-type="fishing" class="active"><span class="g">🎣</span>Fishing</button>
+            <button data-type="travel" class="active"><span class="g">✈️</span>Travel</button>
+            <button data-type="fishing"><span class="g">🎣</span>Fishing</button>
             <button data-type="camping"><span class="g">⛺</span>Camping</button>
             <button data-type="other"><span class="g">🧭</span>Other</button>
           </div>
@@ -6501,7 +6508,7 @@ function renderNewTripModal(){
 }
 
 function bindNewTripModal(){
-  let chosenType = 'fishing';
+  let chosenType = 'travel';
   document.querySelectorAll('#typePick button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('#typePick button').forEach(b=>b.classList.remove('active'));
