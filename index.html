@@ -6552,7 +6552,7 @@ function bindIdentityGate(){
     }
   });
 
-  document.getElementById('authSubmit').addEventListener('click', async ()=>{
+document.getElementById('authSubmit').addEventListener('click', async ()=>{
     const isSignup = state.authMode === 'signup';
     const email = document.getElementById('authEmail').value.trim();
     const password = document.getElementById('authPassword').value;
@@ -6582,9 +6582,18 @@ function bindIdentityGate(){
         if(pendingId){
           await storeSet('pending-join:'+cred.user.uid, {tripId: pendingId}, true);
         }
-        await withTimeout(sendEmailVerification(cred.user, verificationActionCodeSettings()), 'Sending verification email');
+        // Deliberately its OWN try/catch, separate from account creation
+        // above — the account already exists at this point regardless of
+        // whether this send succeeds, so a failure here must not be
+        // treated the same as "signup failed."
+        try{
+          await withTimeout(sendEmailVerification(cred.user, verificationActionCodeSettings()), 'Sending verification email');
+        }catch(sendErr){
+          pendingVerifyEmailError = authErrorMessage(sendErr);
+        }
         // onAuthStateChanged fires from the sign-up itself — it'll see an
-        // unverified user and render() will switch to the verify-email gate.
+        // unverified user and render() will switch to the verify-email gate,
+        // whether or not the send above succeeded.
       } else {
         await withTimeout(signInWithEmailAndPassword(auth, email, password), 'Signing in');
       }
@@ -6606,7 +6615,7 @@ function authErrorMessage(e){
     'auth/invalid-credential': 'Email or password is incorrect.',
     'auth/wrong-password': 'Email or password is incorrect.',
     'auth/user-not-found': 'No account found for that email — check for a typo, or create an account.',
-    'auth/too-many-requests': 'Too many attempts — wait a bit before trying again.',
+    'auth/too-many-requests': 'Too many verification emails sent recently — this is a temporary limit on Firebase\u2019s side, not a problem with your account. Wait a few minutes and try Resend.',
   };
   return map[e.code] || String(e.message || e);
 }
@@ -6706,6 +6715,16 @@ function renderVerifyEmailGate(){
 // out, or successfully verifying) without leaking a timer or a stale listener.
 let verifyPollTimer = null;
 let verifyVisibilityHandler = null;
+// Set when the FIRST verification email (sent immediately after signup, in
+// bindIdentityGate's authSubmit handler) fails to go out — e.g. Firebase's
+// own email quota, not something this app controls. The account itself
+// still gets created successfully in that case, so this is surfaced here
+// on the verify-email gate (where the working "Resend" button already
+// lives) rather than shown as a signup failure — showing it on the signup
+// form would be actively misleading, since retrying signup with the same
+// email would just fail with "already in use" even though nothing about
+// signing up itself broke. Module-level so both functions can reach it.
+let pendingVerifyEmailError = null;
 function stopVerifyPolling(){
   if(verifyPollTimer){ clearInterval(verifyPollTimer); verifyPollTimer = null; }
   if(verifyVisibilityHandler){ document.removeEventListener('visibilitychange', verifyVisibilityHandler); verifyVisibilityHandler = null; }
@@ -6714,6 +6733,16 @@ function bindVerifyEmailGate(){
   stopVerifyPolling(); // in case this gate is being re-bound (e.g. after "Resend")
   const statusEl = document.getElementById('verifyStatus');
   const setStatus = (msg, isError)=>{ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--danger)' : 'var(--ink-soft)'; };
+
+  // If the FIRST verification email (sent right after signup) failed to
+  // go out, surface that here rather than leaving someone staring at an
+  // inbox that was never going to get anything — see pendingVerifyEmailError
+  // where it's set. Cleared immediately so it doesn't linger across future
+  // visits to this gate (e.g. after a normal, successful Resend).
+  if(pendingVerifyEmailError){
+    setStatus('We couldn\u2019t send the first verification email (' + pendingVerifyEmailError + '). Tap Resend below to try again.', true);
+    pendingVerifyEmailError = null;
+  }
 
   // silent=true: used by the background poll and the tab-refocus check —
   // those shouldn't show "still not verified" errors on every failed check,
