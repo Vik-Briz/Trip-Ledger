@@ -412,8 +412,9 @@
   }
   .activity-map-link{
     flex:none; text-decoration:none; font-size:15px; padding:3px 6px; border:1px solid var(--line);
-    border-radius:4px; background:#fff;
+    border-radius:4px; background:#fff; appearance:none; -webkit-appearance:none; font-family:inherit; line-height:1.2;
   }
+  .pin-drop-marker{font-size:26px; line-height:1; text-align:center; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));}
   .activity-notes{
     border:1px solid var(--line); border-radius:4px; padding:5px 8px;
     font-size:11.5px; font-family:'Work Sans',sans-serif; background:#fff; resize:vertical; min-height:28px;
@@ -3383,6 +3384,8 @@ const state = {
   showManageAccessModal: false,
   showInviteModal: false,
   inviteForTripId: null, // when set, Invite generates a link that auto-joins that specific trip
+  showPinDropModal: false,
+  pinDropActivityId: null, // which itinerary activity the picked location writes back to
   developerMaintenanceMode: false, // explicit, off-by-default opt-in — Developer troubleshooting any trip without being personally added, always OFF at the start of a session
   loaded: false,
   identity: null,     // {name, phone, email, uid} — only set once signed in AND email-verified
@@ -4567,6 +4570,12 @@ function mountModals(){
     document.body.appendChild(wrap4.firstElementChild);
     bindInviteModal();
   }
+  if(state.showPinDropModal && t && canEditTrip(t)){
+    const wrap5 = document.createElement('div');
+    wrap5.innerHTML = renderPinDropModal();
+    document.body.appendChild(wrap5.firstElementChild);
+    bindPinDropModal(t);
+  }
 }
 
 function renderTripScreen(){
@@ -4595,7 +4604,8 @@ function renderTripScreen(){
           <div class="sub">${meta.label} &middot; ${t.people.filter(p=>p.status!=='pending').length} member${t.people.filter(p=>p.status!=='pending').length===1?'':'s'} &middot; ${t.days.length} day${t.days.length===1?'':'s'}</div>
           <div class="loc-line">
             ${t.location && t.location.name
-              ? `<a href="${escapeHtml(t.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(t.location.name)))}" target="_blank" rel="noopener">📍 ${escapeHtml(t.location.name)}</a>`
+              ? `<a href="${escapeHtml(t.location.mapsUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(t.location.name)))}" target="_blank" rel="noopener">📍 ${escapeHtml(t.location.name)}</a>
+                 <a href="${escapeHtml(geoUri(t.location.name, t.location.mapsUrl))}" class="loc-edit" title="Try opening in an offline-map app (e.g. Organic Maps) instead of Google Maps">🗺️ offline map</a>`
               : (ADMIN ? `<span class="loc-add" id="btnSetLocation">📍 Add location</span>` : '')}
             ${ADMIN && t.location && t.location.name ? `<span class="loc-edit" id="btnSetLocation">edit</span>` : ''}
           </div>
@@ -5755,6 +5765,26 @@ function rome2rioUrl(origin, destination){
   const slug = s => encodeURIComponent(String(s).trim()).replace(/%20/g, '-');
   return `https://www.rome2rio.com/s/${slug(origin)}/${slug(destination)}`;
 }
+// Builds a "geo:" URI — the OS-level standard for "open this location in
+// whichever map app the person has chosen to handle it," which includes
+// offline-map apps like Organic Maps (the open-source fork of Maps.me)
+// that register as a geo: handler. Real coordinates give a precise pin
+// when we have them (stored on mapsUrl when a location was picked from
+// the autocomplete suggestions — see the place-picker code); otherwise
+// falls back to a text search the receiving app resolves itself.
+// Platform support varies: this is a well-established Android convention,
+// several apps register as handlers for it; iOS support depends on which
+// map apps are installed and whether they've registered for it too — this
+// is offered as an additional option alongside the Google Maps link, not
+// a replacement, since it isn't guaranteed to work the same everywhere.
+function geoUri(name, mapsUrl){
+  if(!name) return '';
+  const m = mapsUrl && /query=(-?\d+\.\d+),(-?\d+\.\d+)/.exec(mapsUrl);
+  if(m){
+    return `geo:${m[1]},${m[2]}?q=${m[1]},${m[2]}(${encodeURIComponent(name)})`;
+  }
+  return `geo:0,0?q=${encodeURIComponent(name)}`;
+}
 function formatDayDate(dateStr){
   if(!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -5887,7 +5917,9 @@ function renderItinerary(t){
           <div class="itin-loc-row" style="position:relative">
             <input type="text" class="activity-location itin-loc-input" value="${escapeHtml(a.location?a.location.name:'')}" placeholder="📍 Location (optional)" autocomplete="off" ${RO}>
             ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="activity-map-link" title="Open in Google Maps">🗺️</a>` : ''}
+            ${mapsUrl ? `<a href="${escapeHtml(geoUri(a.location.name, mapsUrl))}" class="activity-map-link" title="Try opening in an offline-map app (e.g. Organic Maps) instead of Google Maps">📴</a>` : ''}
             ${routeUrl ? `<a href="${escapeHtml(routeUrl)}" target="_blank" rel="noopener" class="activity-map-link activity-route-link" title="Getting there from ${escapeHtml(routeOrigin)} (Rome2Rio — flight/train/bus/car/ferry options)">🧭</a>` : ''}
+            ${ADMIN ? `<button type="button" class="activity-map-link activity-pin-drop" data-activity-pin="${a.id}" title="Drop a pin on a map instead of typing — fills in the location, and a precise map link, automatically" style="cursor:pointer">📍</button>` : ''}
             <div class="place-suggestions" hidden></div>
           </div>
           <textarea class="activity-notes itin-notes-input" rows="1" placeholder="Notes (optional)" ${RO}>${escapeHtml(a.notes||'')}</textarea>
@@ -6383,6 +6415,11 @@ function bindPanelEvents(){
   });
   qa('.activity-notes').forEach(el=>el.addEventListener('input', e=>{
     findActivity(t, rowId(e,'activity')).notes = e.target.value; scheduleSave();
+  }));
+  qa('.activity-pin-drop').forEach(el=>el.addEventListener('click', e=>{
+    state.pinDropActivityId = e.target.closest('.activity-pin-drop').dataset.activityPin;
+    state.showPinDropModal = true;
+    render();
   }));
   qa('.activity-del').forEach(el=>el.addEventListener('click', e=>{
     const idv = rowId(e,'activity'); t.activities = t.activities.filter(a=>a.id!==idv); scheduleSave(); renderPanel();
@@ -7244,6 +7281,119 @@ function bindInviteModal(){
       input.select();
       msg.textContent = 'Link selected \u2014 copy it manually (Ctrl/Cmd+C).';
     }
+  });
+}
+
+/* ---------- Drop-a-pin location picker ---------- */
+// Loads Leaflet (map library) + its CSS from CDN on first use only, and
+// reuses the same load on every later open — no bundler, no build step,
+// matching how the rest of this single-file app pulls in everything else
+// it needs. Returns a promise that resolves once window.L is ready to use.
+let leafletLoadPromise = null;
+function loadLeaflet(){
+  if(leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve, reject)=>{
+    if(window.L){ resolve(window.L); return; }
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css';
+    document.head.appendChild(css);
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+    script.onload = ()=> resolve(window.L);
+    script.onerror = ()=> reject(new Error('Could not load the map — check your connection and try again.'));
+    document.head.appendChild(script);
+  });
+  return leafletLoadPromise;
+}
+function renderPinDropModal(){
+  return `
+    <div class="modal-backdrop" id="pinDropBackdrop">
+      <div class="modal" style="max-width:520px">
+        <h2>📍 Drop a pin</h2>
+        <div class="section-note" style="margin-bottom:10px">Tap or click anywhere on the map to set this activity's location — the address and a map link fill in automatically.</div>
+        <div id="pinDropMap" style="height:340px; border-radius:8px; border:1px solid var(--line); background:var(--paper-dark);"></div>
+        <div id="pinDropAddress" class="section-note" style="margin-top:10px;min-height:16px"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="cancelPinDrop">Cancel</button>
+          <button class="btn" id="usePinDrop" disabled>Use this location</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function bindPinDropModal(t){
+  const close = ()=>{ state.showPinDropModal=false; state.pinDropActivityId=null; render(); };
+  document.getElementById('cancelPinDrop').addEventListener('click', close);
+  const backdrop = document.getElementById('pinDropBackdrop');
+  backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) close(); });
+
+  const addressEl = document.getElementById('pinDropAddress');
+  const useBtn = document.getElementById('usePinDrop');
+  let picked = null; // {lat, lon, name}
+
+  addressEl.textContent = 'Loading map…';
+  loadLeaflet().then(L=>{
+    addressEl.textContent = '';
+    // Start centred roughly on the trip's overall location if it has
+    // coordinates already, else a zoomed-out world view — better than
+    // guessing a specific city that might be wrong for this trip.
+    const existing = t.location && t.location.mapsUrl && /query=(-?\d+\.\d+),(-?\d+\.\d+)/.exec(t.location.mapsUrl);
+    const startLat = existing ? parseFloat(existing[1]) : 20;
+    const startLon = existing ? parseFloat(existing[2]) : 0;
+    const startZoom = existing ? 12 : 2;
+
+    const map = L.map('pinDropMap').setView([startLat, startLon], startZoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    let marker = null;
+    const pinIcon = L.divIcon({html:'📍', className:'pin-drop-marker', iconSize:[28,28], iconAnchor:[14,26]});
+
+    map.on('click', async (e)=>{
+      const {lat, lng} = e.latlng;
+      if(marker) marker.setLatLng([lat, lng]);
+      else marker = L.marker([lat, lng], {icon: pinIcon}).addTo(map);
+
+      useBtn.disabled = true;
+      addressEl.textContent = 'Looking up address…';
+      picked = {lat, lon: lng, name: `${lat.toFixed(5)}, ${lng.toFixed(5)}`}; // fallback if reverse geocoding fails or is slow
+      try{
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        if(res.ok){
+          const data = await res.json();
+          if(data && data.display_name){
+            picked = {lat, lon: lng, name: data.display_name};
+          }
+        }
+      }catch(err){
+        // Keep the coordinate fallback already set above — still usable,
+        // just without a friendly address name.
+      }
+      addressEl.textContent = picked.name;
+      useBtn.disabled = false;
+    });
+
+    // Leaflet needs a nudge to size itself correctly when its container
+    // wasn't visible (display:none) at the moment the map was created —
+    // true here, since this whole modal was just inserted into the DOM.
+    setTimeout(()=>map.invalidateSize(), 50);
+  }).catch(err=>{
+    addressEl.textContent = err.message;
+  });
+
+  useBtn.addEventListener('click', ()=>{
+    if(!picked) return;
+    const a = findActivity(t, state.pinDropActivityId);
+    if(a){
+      if(!a.location) a.location = {name:'', mapsUrl:''};
+      a.location.name = picked.name;
+      a.location.mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(picked.lat + ',' + picked.lon);
+      scheduleSave();
+    }
+    close();
   });
 }
 
